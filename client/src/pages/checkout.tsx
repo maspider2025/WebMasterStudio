@@ -614,6 +614,21 @@ export default function Checkout() {
                   <p className="text-sm text-foreground/70 mb-2">Os detalhes do cartão serão solicitados no próximo passo.</p>
                 </div>
               )}
+              
+              {formData.paymentMethod === 'paypal' && (
+                <div className="mt-4 p-4 border rounded-md">
+                  <h3 className="text-md font-medium mb-3">Pagamento via PayPal</h3>
+                  <p className="text-sm text-foreground/70 mb-4">Clique no botão abaixo para finalizar seu pagamento com segurança através do PayPal.</p>
+                  
+                  <div className="flex justify-center">
+                    <PayPalButton 
+                      amount={calculateTotal().toString()}
+                      currency="BRL"
+                      intent="CAPTURE"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
             
             {/* Botão de finalização */}
