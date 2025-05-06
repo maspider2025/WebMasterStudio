@@ -63,8 +63,9 @@ export function DatabaseVisualizer({ projectId = 'default' }: DatabaseVisualizer
   const loadTables = async () => {
     setIsLoading(true);
     try {
-      // Usa o helper resolveProjectId para obter o ID do projeto de forma mais robusta
-      const resolvedId = resolveProjectId(projectId);
+      // Usa o helper resolveProjectId (assíncrono) para obter o ID do projeto de forma mais robusta
+      // Esta versão pode até mesmo consultar a API para resolver o ID por nome do projeto
+      const resolvedId = await resolveProjectId(projectId);
       
       if (!resolvedId) {
         toast({
@@ -80,6 +81,7 @@ export function DatabaseVisualizer({ projectId = 'default' }: DatabaseVisualizer
       // vamos garantir aqui que temos uma string válida
       const currentProjectId: string = resolvedId;
       
+      console.log("Carregando tabelas para o projeto ID:", currentProjectId);
       const response = await apiRequest('GET', `/api/database/tables?projectId=${currentProjectId}`);
       const data = await response.json();
       
@@ -116,8 +118,9 @@ export function DatabaseVisualizer({ projectId = 'default' }: DatabaseVisualizer
     setTableData(null);
     
     try {
-      // Usa o helper resolveProjectId para obter o ID do projeto de forma mais robusta
-      const resolvedId = resolveProjectId(projectId);
+      // Usa o helper resolveProjectId (assíncrono) para obter o ID do projeto de forma mais robusta
+      // Esta versão pode até mesmo consultar a API para resolver o ID por nome do projeto
+      const resolvedId = await resolveProjectId(projectId);
       
       if (!resolvedId) {
         toast({
@@ -132,6 +135,8 @@ export function DatabaseVisualizer({ projectId = 'default' }: DatabaseVisualizer
       // TypeScript não sabe que já validamos a existência do ID acima, então 
       // vamos garantir aqui que temos uma string válida
       const currentProjectId: string = resolvedId;
+      
+      console.log("Carregando dados da tabela", tableName, "para o projeto ID:", currentProjectId);
       
       // Buscar schema da tabela para as informações estruturais
       const schemaResponse = await apiRequest('GET', `/api/database/tables/${tableName}/schema?projectId=${currentProjectId}`);

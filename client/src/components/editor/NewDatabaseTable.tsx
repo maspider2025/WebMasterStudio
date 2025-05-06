@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Plus, X, Database, Save } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { resolveProjectId } from "@/lib/project-id-helper";
 
 interface Column {
   name: string;
@@ -172,13 +173,29 @@ export default function NewDatabaseTable({ onTableCreated }: NewDatabaseTablePro
     setSubmitting(true);
     
     try {
+      // Obter o ID do projeto atual de forma robusta
+      const projectId = await resolveProjectId('default');
+      
+      if (!projectId) {
+        toast({
+          title: "Projeto não identificado",
+          description: "Não foi possível identificar o ID do projeto atual. Tente salvar o projeto primeiro.",
+          variant: "destructive"
+        });
+        setSubmitting(false);
+        return;
+      }
+      
+      console.log("Criando tabela para o projeto ID:", projectId);
+      
       const response = await apiRequest('POST', '/api/database/tables', {
         name: tableName,
         description: tableDescription,
         columns,
         timestamps: includeTimestamps,
         softDelete: includeSoftDelete,
-        generateApi: true // Habilitar geração automática de API
+        generateApi: true, // Habilitar geração automática de API
+        projectId // Adicionar o ID do projeto à requisição
       });
       
       const data = await response.json();
