@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import AIAssistant from "./AIAssistant";
 import AdvancedCssEditor from "./AdvancedCssEditor";
 import CssPresetLibrary from "./CssPresetLibrary";
@@ -667,11 +667,11 @@ const PropertyPanel = () => {
             {selectedElement && (
               <HtmlEditor
                 htmlContent={selectedElement.content || ''}
-                cssContent={selectedElement.customCss || ''}
-                jsContent={selectedElement.customJs || ''}
+                cssContent={selectedElement.customCode?.css || ''}
+                jsContent={selectedElement.customCode?.js || ''}
                 onHtmlChange={(html) => updateElementContent(selectedElement.id, { content: html })}
-                onCssChange={(css) => updateElementContent(selectedElement.id, { customCss: css })}
-                onJsChange={(js) => updateElementContent(selectedElement.id, { customJs: js })}
+                onCssChange={(css) => handleUpdateCss(css)}
+                onJsChange={(js) => handleUpdateJs(js)}
               />
             )}
           </div>
