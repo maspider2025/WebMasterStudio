@@ -5372,6 +5372,544 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
     }
   });
 
+  // Endpoint para listar registros de uma tabela
+  app.get(`${apiPrefix}/p/:projectId/data/:tableName`, express.json(), async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId, 10);
+      const tableName = req.params.tableName;
+      
+      if (!projectId || isNaN(projectId) || !tableName) {
+        return res.status(400).json({ 
+          success: false,
+          message: "ID do projeto e nome da tabela são obrigatórios" 
+        });
+      }
+      
+      // Nome completo da tabela no banco
+      const fullTableName = `p${projectId}_${tableName}`;
+      
+      // Verificar se a tabela existe
+      const tableCheck = await db.execute(sql`
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.tables 
+          WHERE table_schema = 'public' AND table_name = ${fullTableName}
+        ) as exists
+      `);
+      
+      if (!tableCheck.rows[0].exists) {
+        return res.status(404).json({ 
+          success: false,
+          message: `Tabela ${tableName} não existe para o projeto ${projectId}` 
+        });
+      }
+      
+      // Parâmetros opcionais para paginação e ordenação
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 100;
+      const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : 0;
+      const orderBy = req.query.orderBy as string || "id";
+      const order = (req.query.order as string || "asc").toUpperCase();
+      
+      // Validar parametros
+      const validOrder = ["ASC", "DESC"].includes(order);
+      
+      // Buscar registros
+      let query = sql`SELECT * FROM ${sql.identifier(fullTableName)}`;
+      
+      // Adicionar ordem se campos válidos
+      query = sql`${query} ORDER BY ${sql.identifier(orderBy)} ${sql.raw(validOrder ? order : "ASC")}`;
+      
+      // Adicionar limit e offset
+      query = sql`${query} LIMIT ${limit} OFFSET ${offset}`;
+      
+      const result = await db.execute(query);
+      
+      // Contar total de registros para paginação
+      const countQuery = sql`SELECT COUNT(*) as total FROM ${sql.identifier(fullTableName)}`;
+      const countResult = await db.execute(countQuery);
+      const total = parseInt(countResult.rows[0]?.total || '0', 10);
+      
+      // Retornar com metadata de paginação
+      res.json({
+        success: true,
+        projectId,
+        tableName,
+        data: result.rows,
+        meta: {
+          total,
+          limit,
+          offset,
+          hasMore: offset + result.rows.length < total
+        }
+      });
+      
+    } catch (error) {
+      console.error('Erro ao listar registros da tabela:', error);
+      res.status(500).json({ 
+        success: false,
+        message: 'Erro ao listar registros da tabela', 
+        error: String(error) 
+      });
+    }
+  });
+  
+  // Endpoint para obter um registro específico de uma tabela
+  app.get(`${apiPrefix}/p/:projectId/data/:tableName/:id`, express.json(), async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId, 10);
+      const tableName = req.params.tableName;
+      const id = req.params.id;
+      
+      if (!projectId || isNaN(projectId) || !tableName || !id) {
+        return res.status(400).json({ 
+          success: false,
+          message: "ID do projeto, nome da tabela e ID do registro são obrigatórios" 
+        });
+      }
+      
+      // Nome completo da tabela no banco
+      const fullTableName = `p${projectId}_${tableName}`;
+      
+      // Verificar se a tabela existe
+      const tableCheck = await db.execute(sql`
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.tables 
+          WHERE table_schema = 'public' AND table_name = ${fullTableName}
+        ) as exists
+      `);
+      
+      if (!tableCheck.rows[0].exists) {
+        return res.status(404).json({ 
+          success: false,
+          message: `Tabela ${tableName} não existe para o projeto ${projectId}` 
+        });
+      }
+      
+      // Buscar o registro
+      const query = sql`
+        SELECT * FROM ${sql.identifier(fullTableName)}
+        WHERE id = ${id}
+        LIMIT 1
+      `;
+      
+      const result = await db.execute(query);
+      
+      if (result.rows.length === 0) {
+        return res.status(404).json({ 
+          success: false,
+          message: `Registro com ID ${id} não encontrado na tabela ${tableName}` 
+        });
+      }
+      
+      res.json({
+        success: true,
+        projectId,
+        tableName,
+        data: result.rows[0]
+      });
+      
+    } catch (error) {
+      console.error('Erro ao buscar registro da tabela:', error);
+      res.status(500).json({ 
+        success: false,
+        message: 'Erro ao buscar registro da tabela', 
+        error: String(error) 
+      });
+    }
+  });
+  
+  // Endpoint para inserir registros em uma tabela
+  app.post(`${apiPrefix}/p/:projectId/data/:tableName`, express.json(), async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId, 10);
+      const tableName = req.params.tableName;
+      const data = req.body;
+      
+      if (!projectId || isNaN(projectId) || !tableName) {
+        return res.status(400).json({ 
+          success: false,
+          message: "ID do projeto e nome da tabela são obrigatórios" 
+        });
+      }
+      
+      // Nome completo da tabela no banco
+      const fullTableName = `p${projectId}_${tableName}`;
+      
+      // Verificar se a tabela existe
+      const tableCheck = await db.execute(sql`
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.tables 
+          WHERE table_schema = 'public' AND table_name = ${fullTableName}
+        ) as exists
+      `);
+      
+      if (!tableCheck.rows[0].exists) {
+        return res.status(404).json({ 
+          success: false,
+          message: `Tabela ${tableName} não existe para o projeto ${projectId}` 
+        });
+      }
+      
+      // Verificar se existem dados para inserir
+      if (!data || Object.keys(data).length === 0) {
+        return res.status(400).json({ 
+          success: false,
+          message: "Nenhum dado fornecido para inserção" 
+        });
+      }
+      
+      // Obter estrutura da tabela para validar campos
+      const tableSchema = await db.execute(sql`
+        SELECT column_name, data_type, is_nullable 
+        FROM information_schema.columns 
+        WHERE table_name = ${fullTableName}
+        AND table_schema = 'public'
+      `);
+      
+      // Transformar em um mapa para fácil acesso
+      const columnsMap = {};
+      for (const col of tableSchema.rows) {
+        columnsMap[col.column_name] = {
+          dataType: col.data_type,
+          isNullable: col.is_nullable === 'YES'
+        };
+      }
+      
+      // Validar os dados fornecidos contra o schema
+      const validatedData = {};
+      const errors = [];
+      
+      // Acompanhar as colunas disponíveis
+      const availableColumns = new Set(Object.keys(columnsMap));
+      
+      // Para cada campo nos dados
+      for (const [key, value] of Object.entries(data)) {
+        // Verificar se o campo existe na tabela
+        if (!availableColumns.has(key)) {
+          errors.push(`Campo '${key}' não existe na tabela ${tableName}`);
+          continue;
+        }
+        
+        // Verificar valores nulos
+        if ((value === null || value === undefined) && !columnsMap[key].isNullable) {
+          errors.push(`Campo '${key}' não pode ser nulo`);
+          continue;
+        }
+        
+        // Se não é nulo, adicionar aos dados validados
+        if (value !== undefined) {
+          validatedData[key] = value;
+        }
+      }
+      
+      // Se houver erros, retornar
+      if (errors.length > 0) {
+        return res.status(400).json({ 
+          success: false,
+          message: "Erros de validação nos dados fornecidos",
+          errors
+        });
+      }
+      
+      // Construir a query de inserção
+      const columns = Object.keys(validatedData);
+      const values = Object.values(validatedData);
+      
+      // Criar parâmetros para a query usando sql.placeholder
+      const params = [];
+      const placeholders = [];
+      
+      // Criar placeholders nomeados para cada valor
+      for (let i = 0; i < values.length; i++) {
+        // Usar nomes de placeholders sequenciais
+        const placeholderName = `param${i}`;
+        // Adicionar ao array de params para sql.placeholder
+        params.push(sql.placeholder(placeholderName, values[i]));
+        // Adicionar o placeholderà string de placeholders
+        placeholders.push(sql.placeholder(placeholderName));
+      }
+      
+      // Construir a query com placeholders nomeados
+      const insertQuery = sql`
+        INSERT INTO ${sql.identifier(fullTableName)} (${sql.join(
+          columns.map(col => sql.identifier(col)),
+          sql`, `
+        )})
+        VALUES (${sql.join(placeholders, sql`, `)})
+        RETURNING *
+      `;
+      
+      // Executar a query com os parâmetros
+      const result = await db.execute(insertQuery);
+      
+      res.status(201).json({
+        success: true,
+        projectId,
+        tableName,
+        message: 'Registro inserido com sucesso',
+        data: result.rows[0]
+      });
+      
+    } catch (error) {
+      console.error('Erro ao inserir registro na tabela:', error);
+      res.status(500).json({ 
+        success: false,
+        message: 'Erro ao inserir registro na tabela', 
+        error: String(error) 
+      });
+    }
+  });
+  
+  // Endpoint para atualizar um registro em uma tabela
+  app.put(`${apiPrefix}/p/:projectId/data/:tableName/:id`, express.json(), async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId, 10);
+      const tableName = req.params.tableName;
+      const id = req.params.id;
+      const data = req.body;
+      
+      if (!projectId || isNaN(projectId) || !tableName || !id) {
+        return res.status(400).json({ 
+          success: false,
+          message: "ID do projeto, nome da tabela e ID do registro são obrigatórios" 
+        });
+      }
+      
+      // Nome completo da tabela no banco
+      const fullTableName = `p${projectId}_${tableName}`;
+      
+      // Verificar se a tabela existe
+      const tableCheck = await db.execute(sql`
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.tables 
+          WHERE table_schema = 'public' AND table_name = ${fullTableName}
+        ) as exists
+      `);
+      
+      if (!tableCheck.rows[0].exists) {
+        return res.status(404).json({ 
+          success: false,
+          message: `Tabela ${tableName} não existe para o projeto ${projectId}` 
+        });
+      }
+      
+      // Verificar se existem dados para atualizar
+      if (!data || Object.keys(data).length === 0) {
+        return res.status(400).json({ 
+          success: false,
+          message: "Nenhum dado fornecido para atualização" 
+        });
+      }
+      
+      // Verificar se o registro existe
+      const checkRecord = await db.execute(sql`
+        SELECT EXISTS (
+          SELECT 1 FROM ${sql.identifier(fullTableName)}
+          WHERE id = ${id}
+        ) as exists
+      `);
+      
+      if (!checkRecord.rows[0].exists) {
+        return res.status(404).json({ 
+          success: false,
+          message: `Registro com ID ${id} não encontrado na tabela ${tableName}` 
+        });
+      }
+      
+      // Obter estrutura da tabela para validar campos
+      const tableSchema = await db.execute(sql`
+        SELECT column_name, data_type, is_nullable 
+        FROM information_schema.columns 
+        WHERE table_name = ${fullTableName}
+        AND table_schema = 'public'
+      `);
+      
+      // Transformar em um mapa para fácil acesso
+      const columnsMap = {};
+      for (const col of tableSchema.rows) {
+        columnsMap[col.column_name] = {
+          dataType: col.data_type,
+          isNullable: col.is_nullable === 'YES'
+        };
+      }
+      
+      // Validar os dados fornecidos contra o schema
+      const validatedData = {};
+      const errors = [];
+      
+      // Acompanhar as colunas disponíveis
+      const availableColumns = new Set(Object.keys(columnsMap));
+      
+      // Não permitir atualização do ID
+      delete data.id;
+      
+      // Para cada campo nos dados
+      for (const [key, value] of Object.entries(data)) {
+        // Verificar se o campo existe na tabela
+        if (!availableColumns.has(key)) {
+          errors.push(`Campo '${key}' não existe na tabela ${tableName}`);
+          continue;
+        }
+        
+        // Verificar valores nulos
+        if ((value === null || value === undefined) && !columnsMap[key].isNullable) {
+          errors.push(`Campo '${key}' não pode ser nulo`);
+          continue;
+        }
+        
+        // Se não é nulo, adicionar aos dados validados
+        if (value !== undefined) {
+          validatedData[key] = value;
+        }
+      }
+      
+      // Se houver erros, retornar
+      if (errors.length > 0) {
+        return res.status(400).json({ 
+          success: false,
+          message: "Erros de validação nos dados fornecidos",
+          errors
+        });
+      }
+      
+      // Atualizar timestamp se existir
+      if (availableColumns.has('updated_at')) {
+        validatedData['updated_at'] = new Date();
+      }
+      
+      // Criar parâmetros para a query usando sql.placeholder
+      const params = [];
+      const setItems = [];
+      const entries = Object.entries(validatedData);
+      
+      // Criar placeholders nomeados para cada valor
+      for (let i = 0; i < entries.length; i++) {
+        const [key, value] = entries[i];
+        // Usar nomes de placeholders sequenciais
+        const placeholderName = `param${i}`;
+        // Adicionar ao array de params para sql.placeholder
+        params.push(sql.placeholder(placeholderName, value));
+        // Adicionar o parâmetro ao SET clause
+        setItems.push(sql`${sql.identifier(key)} = ${sql.placeholder(placeholderName)}`);
+      }
+      
+      // Construir a query com placeholders nomeados
+      const updateQuery = sql`
+        UPDATE ${sql.identifier(fullTableName)}
+        SET ${sql.join(setItems, sql`, `)}
+        WHERE id = ${id}
+        RETURNING *
+      `;
+      
+      // Executar a query com os parâmetros
+      const result = await db.execute(updateQuery);
+      
+      res.json({
+        success: true,
+        projectId,
+        tableName,
+        message: 'Registro atualizado com sucesso',
+        data: result.rows[0]
+      });
+      
+    } catch (error) {
+      console.error('Erro ao atualizar registro na tabela:', error);
+      res.status(500).json({ 
+        success: false,
+        message: 'Erro ao atualizar registro na tabela', 
+        error: String(error) 
+      });
+    }
+  });
+  
+  // Endpoint para excluir um registro de uma tabela
+  app.delete(`${apiPrefix}/p/:projectId/data/:tableName/:id`, express.json(), async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId, 10);
+      const tableName = req.params.tableName;
+      const id = req.params.id;
+      
+      if (!projectId || isNaN(projectId) || !tableName || !id) {
+        return res.status(400).json({ 
+          success: false,
+          message: "ID do projeto, nome da tabela e ID do registro são obrigatórios" 
+        });
+      }
+      
+      // Nome completo da tabela no banco
+      const fullTableName = `p${projectId}_${tableName}`;
+      
+      // Verificar se a tabela existe
+      const tableCheck = await db.execute(sql`
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.tables 
+          WHERE table_schema = 'public' AND table_name = ${fullTableName}
+        ) as exists
+      `);
+      
+      if (!tableCheck.rows[0].exists) {
+        return res.status(404).json({ 
+          success: false,
+          message: `Tabela ${tableName} não existe para o projeto ${projectId}` 
+        });
+      }
+      
+      // Verificar se o registro existe
+      const checkRecord = await db.execute(sql`
+        SELECT EXISTS (
+          SELECT 1 FROM ${sql.identifier(fullTableName)}
+          WHERE id = ${id}
+        ) as exists
+      `);
+      
+      if (!checkRecord.rows[0].exists) {
+        return res.status(404).json({ 
+          success: false,
+          message: `Registro com ID ${id} não encontrado na tabela ${tableName}` 
+        });
+      }
+      
+      // Verificar se a tabela tem suporte a soft delete
+      const hasSoftDelete = await db.execute(sql`
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = ${fullTableName}
+          AND column_name = 'deleted_at'
+          AND table_schema = 'public'
+        ) as exists
+      `);
+      
+      if (hasSoftDelete.rows[0].exists) {
+        // Se suporta soft delete, apenas marca como excluído
+        await db.execute(sql`
+          UPDATE ${sql.identifier(fullTableName)}
+          SET "deleted_at" = CURRENT_TIMESTAMP
+          WHERE id = ${id}
+        `);
+      } else {
+        // Senão, exclui permanentemente
+        await db.execute(sql`
+          DELETE FROM ${sql.identifier(fullTableName)}
+          WHERE id = ${id}
+        `);
+      }
+      
+      res.json({
+        success: true,
+        projectId,
+        tableName,
+        message: `Registro com ID ${id} excluído com sucesso`
+      });
+      
+    } catch (error) {
+      console.error('Erro ao excluir registro da tabela:', error);
+      res.status(500).json({ 
+        success: false,
+        message: 'Erro ao excluir registro da tabela', 
+        error: String(error) 
+      });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
