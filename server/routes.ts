@@ -4738,12 +4738,21 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
       const projectId = req.query.projectId ? parseInt(req.query.projectId as string, 10) : null;
       const data = req.body;
       
+      // Log dos dados recebidos para debug
+      console.log(`Criando registro para projeto ${projectId}, tabela ${tableName}`);
+      console.log('Dados:', data);
+      
       if (!projectId) {
         return res.status(400).json({ message: "É necessário fornecer o ID do projeto" });
       }
       
+      if (!data || Object.keys(data).length === 0) {
+        return res.status(400).json({ message: "Dados para inserção são obrigatórios" });
+      }
+      
       // Construir o nome completo da tabela com o prefixo do projeto
       const fullTableName = `p${projectId}_${tableName}`;
+      console.log(`Nome completo da tabela: ${fullTableName}`);
       
       // Verificar se o tableName é válido para evitar SQL injection
       const tableCheck = await db.execute(sql`
@@ -4761,19 +4770,36 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
       const columns = Object.keys(data);
       const values = Object.values(data);
       
+      // Validar que existem colunas e valores
+      if (columns.length === 0) {
+        return res.status(400).json({ message: "Nenhum campo válido para inserção" });
+      }
+      
       // Criar cláusula SQL para inserção
       const columnStr = columns.map(col => `"${col}"`).join(', ');
       const valuePlaceholders = columns.map((_, i) => `$${i+1}`).join(', ');
       
-      const insertQuery = sql.raw(
-        `INSERT INTO "${fullTableName}" (${columnStr}) VALUES (${valuePlaceholders}) RETURNING *`,
-        values
-      );
+      // Criar parâmetros para a query
+      const sqlParams = [];
+      for (const value of values) {
+        sqlParams.push(value);
+      }
+      
+      console.log(`SQL: INSERT INTO "${fullTableName}" (${columnStr}) VALUES (${valuePlaceholders}) RETURNING *`);
+      console.log('Parâmetros:', sqlParams);
+      
+      // Montar a query usando parâmetros
+      let queryText = `INSERT INTO "${fullTableName}" (${columnStr}) VALUES (${valuePlaceholders}) RETURNING *`;
+      
+      // A versão segura da query utiliza sql tagged template para injeção segura de parâmetros
+      const insertQuery = sql.raw(queryText, sqlParams);
       
       const result = await db.execute(insertQuery);
       
+      console.log('Registro criado com sucesso:', result.rows[0]);
       res.status(201).json(result.rows[0]);
     } catch (error) {
+      console.error('Erro detalhado ao criar registro:', error);
       handleError(res, error, "Erro ao criar registro");
     }
   }
@@ -4790,35 +4816,63 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
     handleCreateRecord(req, res);
   });
   
-  // Endpoint para atualizar um registro
-  app.put(`${apiPrefix}/database/tables/:tableName/data/:id`, async (req, res) => {
+  // Handler para atualizar um registro
+  async function handleUpdateRecord(req: Request, res: Response) {
     try {
       const { tableName, id } = req.params;
+      const projectId = req.query.projectId ? parseInt(req.query.projectId as string, 10) : null;
       const data = req.body;
       
-      // Verificar se o tableName é válido
+      // Log dos dados recebidos para debug
+      console.log(`Atualizando registro ID ${id} na tabela ${tableName}, projeto ${projectId}`);
+      console.log('Dados de atualização:', data);
+      
+      if (!projectId) {
+        return res.status(400).json({ message: "É necessário fornecer o ID do projeto" });
+      }
+      
+      if (!data || Object.keys(data).length === 0) {
+        return res.status(400).json({ message: "Dados para atualização são obrigatórios" });
+      }
+      
+      // Construir o nome completo da tabela com o prefixo do projeto
+      const fullTableName = `p${projectId}_${tableName}`;
+      console.log(`Nome completo da tabela: ${fullTableName}`);
+      
+      // Verificar se o tableName é válido para evitar SQL injection
       const tableCheck = await db.execute(sql`
         SELECT EXISTS (
           SELECT 1 FROM information_schema.tables 
-          WHERE table_schema = 'public' AND table_name = ${tableName}
+          WHERE table_schema = 'public' AND table_name = ${fullTableName}
         ) as exists
       `);
       
       if (!tableCheck.rows[0].exists) {
-        return res.status(404).json({ error: "Tabela não encontrada" });
+        return res.status(404).json({ error: `Tabela ${tableName} não encontrada para o projeto ${projectId}` });
       }
       
       // Construir a atualização dinâmica
       const columns = Object.keys(data);
       const values = Object.values(data);
       
+      // Validar que existem colunas e valores
+      if (columns.length === 0) {
+        return res.status(400).json({ message: "Nenhum campo válido para atualização" });
+      }
+      
       // Criar cláusula SET para atualização
       const setClause = columns.map((col, i) => `"${col}" = $${i+1}`).join(', ');
       
+      // Criar parâmetros para a query
+      const sqlParams = [...values, id];
+      
+      console.log(`SQL: UPDATE "${fullTableName}" SET ${setClause} WHERE id = $${columns.length+1} RETURNING *`);
+      console.log('Parâmetros:', sqlParams);
+      
       // Adicionar o ID como último parâmetro
       const updateQuery = sql.raw(
-        `UPDATE "${tableName}" SET ${setClause} WHERE id = $${columns.length+1} RETURNING *`,
-        [...values, id]
+        `UPDATE "${fullTableName}" SET ${setClause} WHERE id = $${columns.length+1} RETURNING *`,
+        sqlParams
       );
       
       const result = await db.execute(updateQuery);
@@ -4827,50 +4881,78 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
         return res.status(404).json({ error: "Registro não encontrado" });
       }
       
+      console.log('Registro atualizado com sucesso:', result.rows[0]);
       res.json(result.rows[0]);
     } catch (error) {
+      console.error('Erro detalhado ao atualizar registro:', error);
       handleError(res, error, "Erro ao atualizar registro");
     }
+  }
+  
+  // Endpoint para atualizar um registro
+  app.put(`${apiPrefix}/database/tables/:tableName/data/:id`, handleUpdateRecord);
+  
+  // Endpoint personalizado para projetos - atualizar registro em uma tabela
+  app.put(`${apiPrefix}/projects/:projectId/database/tables/:tableName/data/:id`, (req, res) => {
+    // Transferir o ID do projeto dos parâmetros para a query
+    req.query.projectId = req.params.projectId;
+    
+    // Chamar o handler de atualização de registros
+    handleUpdateRecord(req, res);
   });
   
-  // Endpoint para excluir um registro
-  app.delete(`${apiPrefix}/database/tables/:tableName/data/:id`, async (req, res) => {
+  // Handler para excluir um registro
+  async function handleDeleteRecord(req: Request, res: Response) {
     try {
       const { tableName, id } = req.params;
+      const projectId = req.query.projectId ? parseInt(req.query.projectId as string, 10) : null;
       
-      // Verificar se o tableName é válido
+      // Log dos dados recebidos para debug
+      console.log(`Excluindo registro ID ${id} na tabela ${tableName}, projeto ${projectId}`);
+      
+      if (!projectId) {
+        return res.status(400).json({ message: "É necessário fornecer o ID do projeto" });
+      }
+      
+      // Construir o nome completo da tabela com o prefixo do projeto
+      const fullTableName = `p${projectId}_${tableName}`;
+      console.log(`Nome completo da tabela: ${fullTableName}`);
+      
+      // Verificar se o tableName é válido para evitar SQL injection
       const tableCheck = await db.execute(sql`
         SELECT EXISTS (
           SELECT 1 FROM information_schema.tables 
-          WHERE table_schema = 'public' AND table_name = ${tableName}
+          WHERE table_schema = 'public' AND table_name = ${fullTableName}
         ) as exists
       `);
       
       if (!tableCheck.rows[0].exists) {
-        return res.status(404).json({ error: "Tabela não encontrada" });
+        return res.status(404).json({ error: `Tabela ${tableName} não encontrada para o projeto ${projectId}` });
       }
       
       // Verificar se existe coluna deleted_at para soft delete
       const columnCheck = await db.execute(sql`
         SELECT EXISTS (
           SELECT 1 FROM information_schema.columns 
-          WHERE table_schema = 'public' AND table_name = ${tableName} AND column_name = 'deleted_at'
+          WHERE table_schema = 'public' AND table_name = ${fullTableName} AND column_name = 'deleted_at'
         ) as exists
       `);
       
       let result;
       
       if (columnCheck.rows[0].exists) {
+        console.log(`Realizando soft delete no registro ID ${id}`);
         // Soft delete - apenas atualizar deleted_at
         const updateQuery = sql.raw(
-          `UPDATE "${tableName}" SET "deleted_at" = CURRENT_TIMESTAMP WHERE id = $1 RETURNING id`,
+          `UPDATE "${fullTableName}" SET "deleted_at" = CURRENT_TIMESTAMP WHERE id = $1 RETURNING id`,
           [id]
         );
         result = await db.execute(updateQuery);
       } else {
+        console.log(`Realizando hard delete no registro ID ${id}`);
         // Hard delete - remover o registro permanentemente
         const deleteQuery = sql.raw(
-          `DELETE FROM "${tableName}" WHERE id = $1 RETURNING id`,
+          `DELETE FROM "${fullTableName}" WHERE id = $1 RETURNING id`,
           [id]
         );
         result = await db.execute(deleteQuery);
@@ -4880,31 +4962,71 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
         return res.status(404).json({ error: "Registro não encontrado" });
       }
       
+      console.log('Registro excluído com sucesso:', result.rows[0]);
       res.json({ success: true, message: "Registro excluído com sucesso" });
     } catch (error) {
+      console.error('Erro detalhado ao excluir registro:', error);
       handleError(res, error, "Erro ao excluir registro");
     }
+  }
+  
+  // Endpoint para excluir um registro
+  app.delete(`${apiPrefix}/database/tables/:tableName/data/:id`, handleDeleteRecord);
+  
+  // Endpoint personalizado para projetos - excluir registro em uma tabela
+  app.delete(`${apiPrefix}/projects/:projectId/database/tables/:tableName/data/:id`, (req, res) => {
+    // Transferir o ID do projeto dos parâmetros para a query
+    req.query.projectId = req.params.projectId;
+    
+    // Chamar o handler de exclusão de registros
+    handleDeleteRecord(req, res);
   });
   
-  // Endpoint para criar uma nova tabela (dinâmica)
-  app.post(`${apiPrefix}/database/tables`, async (req, res) => {
+  // Handler para criar uma nova tabela (dinâmica)
+  async function handleCreateTable(req: Request, res: Response) {
     try {
       const { tableName, columns } = req.body;
+      const projectId = req.query.projectId ? parseInt(req.query.projectId as string, 10) : null;
+      
+      // Log dos dados recebidos para debug
+      console.log(`Criando tabela ${tableName} para o projeto ${projectId}`);
+      console.log('Definição de colunas:', columns);
+      
+      if (!projectId) {
+        return res.status(400).json({ message: "É necessário fornecer o ID do projeto" });
+      }
       
       if (!tableName || !columns || !Array.isArray(columns) || columns.length === 0) {
         return res.status(400).json({ error: "Nome da tabela e definição de colunas são obrigatórios" });
       }
       
+      // Construir o nome completo da tabela com o prefixo do projeto
+      const fullTableName = `p${projectId}_${tableName}`;
+      console.log(`Nome completo da tabela: ${fullTableName}`);
+      
       // Verificar se a tabela já existe
       const tableCheck = await db.execute(sql`
         SELECT EXISTS (
           SELECT 1 FROM information_schema.tables 
-          WHERE table_schema = 'public' AND table_name = ${tableName}
+          WHERE table_schema = 'public' AND table_name = ${fullTableName}
         ) as exists
       `);
       
       if (tableCheck.rows[0].exists) {
-        return res.status(400).json({ error: "Tabela já existe" });
+        return res.status(400).json({ error: `Tabela ${tableName} já existe para o projeto ${projectId}` });
+      }
+      
+      // Registrar metadados da tabela para o projeto
+      // Inserir primeiro na tabela de metadados do projeto
+      try {
+        await db.execute(sql`
+          INSERT INTO project_databases (project_id, table_name, display_name, description, created_at, updated_at)
+          VALUES (${projectId}, ${fullTableName}, ${tableName}, ${'Tabela criada via API'}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `);
+        console.log('Metadados da tabela registrados com sucesso');
+      } catch (metadataError) {
+        console.error('Erro ao registrar metadados da tabela:', metadataError);
+        // Continuamos mesmo se falhar o registro de metadados
       }
       
       // Construir a cláusula de criação de tabela
@@ -4938,19 +5060,67 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
         columnsDefinition += `, "deleted_at" TIMESTAMP`;
       }
       
+      console.log(`SQL: CREATE TABLE "${fullTableName}" (${columnsDefinition})`);
+      
       // Criar a tabela
-      const createTableQuery = sql.raw(`CREATE TABLE "${tableName}" (${columnsDefinition})`);
+      const createTableQuery = sql.raw(`CREATE TABLE "${fullTableName}" (${columnsDefinition})`);
       await db.execute(createTableQuery);
+      
+      console.log('Tabela criada com sucesso:', fullTableName);
+      
+      // Tentar registrar API automática para a tabela (CRUD básico)
+      try {
+        // Gerar API paths para CRUD
+        const crudEndpoints = [
+          { method: 'GET', path: `/api/data/${tableName}`, description: `Listar todos os registros de ${tableName}` },
+          { method: 'GET', path: `/api/data/${tableName}/:id`, description: `Obter registro específico de ${tableName}` },
+          { method: 'POST', path: `/api/data/${tableName}`, description: `Criar novo registro em ${tableName}` },
+          { method: 'PUT', path: `/api/data/${tableName}/:id`, description: `Atualizar registro em ${tableName}` },
+          { method: 'DELETE', path: `/api/data/${tableName}/:id`, description: `Excluir registro em ${tableName}` }
+        ];
+        
+        for (const endpoint of crudEndpoints) {
+          await db.execute(sql`
+            INSERT INTO project_apis (project_id, api_path, method, description, auto_generated, table_name, created_at, updated_at)
+            VALUES (${projectId}, ${endpoint.path}, ${endpoint.method}, ${endpoint.description}, TRUE, ${fullTableName}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          `);
+        }
+        
+        console.log('APIs CRUD automáticas registradas para a tabela');
+      } catch (apiError) {
+        console.error('Erro ao registrar APIs automáticas:', apiError);
+        // Continuamos mesmo se falhar o registro de APIs
+      }
       
       res.status(201).json({
         success: true,
-        message: "Tabela criada com sucesso",
+        message: `Tabela ${tableName} criada com sucesso para o projeto ${projectId}`,
         tableName,
+        fullTableName,
+        projectId,
         columns: columns.map(col => col.name)
       });
     } catch (error) {
+      console.error('Erro detalhado ao criar tabela:', error);
       handleError(res, error, "Erro ao criar tabela");
     }
+  }
+  
+  // Endpoint para criar uma nova tabela (dinâmica)
+  app.post(`${apiPrefix}/database/tables`, handleCreateTable);
+  
+  // Endpoint personalizado para projetos - criar tabela
+  app.post(`${apiPrefix}/projects/:projectId/database/tables`, (req, res) => {
+    // Transferir o ID do projeto dos parâmetros para a query
+    req.query.projectId = req.params.projectId;
+    
+    console.log('Endpoint de criação de tabela para projeto específico');
+    console.log('Corpo da requisição:', req.body);
+    console.log('Query params:', req.query);
+    console.log('URL params:', req.params);
+    
+    // Chamar o handler de criação de tabela
+    handleCreateTable(req, res);
   });
 
   const httpServer = createServer(app);
