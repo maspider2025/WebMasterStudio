@@ -1836,6 +1836,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get(`${apiPrefix}/database/tables/:tableName/schema`, async (req, res) => {
     try {
       const { tableName } = req.params;
+      const projectId = req.query.projectId ? parseInt(req.query.projectId as string, 10) : null;
+      
+      if (!projectId) {
+        return res.status(400).json({ message: "É necessário fornecer o ID do projeto" });
+      }
+      
+      // Verificar se a tabela pertence ao projeto
+      const projectTable = await db.query.projectDatabases.findFirst({
+        where: and(
+          eq(schema.projectDatabases.projectId, projectId),
+          eq(schema.projectDatabases.tableName, tableName)
+        )
+      });
+      
+      if (!projectTable) {
+        return res.status(404).json({ message: `Tabela ${tableName} não encontrada para o projeto ${projectId}` });
+      }
       
       // Consultar as colunas da tabela
       const query = sql`
@@ -1884,9 +1901,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get(`${apiPrefix}/database/tables/:tableName/data`, async (req, res) => {
     try {
       const { tableName } = req.params;
+      const projectId = req.query.projectId ? parseInt(req.query.projectId as string, 10) : null;
       const page = Number(req.query.page) || 1;
       const limit = Math.min(Number(req.query.limit) || 20, 100);
       const offset = (page - 1) * limit;
+      
+      if (!projectId) {
+        return res.status(400).json({ message: "É necessário fornecer o ID do projeto" });
+      }
+      
+      // Verificar se a tabela pertence ao projeto
+      const projectTable = await db.query.projectDatabases.findFirst({
+        where: and(
+          eq(schema.projectDatabases.projectId, projectId),
+          eq(schema.projectDatabases.tableName, tableName)
+        )
+      });
+      
+      if (!projectTable) {
+        return res.status(404).json({ message: `Tabela ${tableName} não encontrada para o projeto ${projectId}` });
+      }
       
       // Extrair filtros da query string
       const filters: any[] = [];
