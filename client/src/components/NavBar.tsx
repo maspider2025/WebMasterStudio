@@ -1,9 +1,102 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/hooks/use-auth';
+import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Loader2 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface Cart {
   items: any[];
+}
+
+// Componente de botão de autenticação que alterna entre login e menu de usuário
+function AuthButton() {
+  const { user, isLoading, logoutMutation } = useAuth();
+  const [, navigate] = useLocation();
+
+  const handleLogout = () => {
+    logoutMutation.mutate();
+  };
+
+  if (isLoading) {
+    return (
+      <Button size="sm" variant="outline" disabled>
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        Carregando...
+      </Button>
+    );
+  }
+
+  if (!user) {
+    return (
+      <Button 
+        size="sm" 
+        onClick={() => navigate('/auth')}
+        className="bg-primary text-white hover:bg-primary/90"
+      >
+        Login
+      </Button>
+    );
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" className="relative h-9 w-9 rounded-full">
+          <Avatar className="h-9 w-9">
+            <AvatarImage src={user.avatarUrl || undefined} alt={user.username} />
+            <AvatarFallback>
+              {user.username.substring(0, 2).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <div className="flex items-center justify-start gap-2 p-2">
+          <div className="flex flex-col space-y-0.5 leading-none">
+            <p className="font-medium text-sm">{user.username}</p>
+            {user.email && (
+              <p className="text-xs text-muted-foreground">{user.email}</p>
+            )}
+          </div>
+        </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href="/meus-projetos" className="cursor-pointer w-full">
+            Meus Projetos
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/editor" className="cursor-pointer w-full">
+            Editor
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem 
+          className="text-red-600 cursor-pointer"
+          onClick={handleLogout}
+          disabled={logoutMutation.isPending}
+        >
+          {logoutMutation.isPending ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Saindo...
+            </>
+          ) : (
+            "Sair"
+          )}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 export function NavBar() {
@@ -103,9 +196,8 @@ export function NavBar() {
               >
                 GitHub
               </a>
-              <button className="px-4 py-2 rounded-md bg-primary text-white hover:bg-primary/90 text-sm">
-                Login
-              </button>
+              {/* Componente de autenticação baseado no estado do usuário */}
+              <AuthButton />
             </div>
           </div>
         </div>
