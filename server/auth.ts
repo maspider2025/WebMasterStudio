@@ -155,14 +155,8 @@ export function setupAuth(app: Express) {
         return res.status(409).json({ message: "E-mail já está em uso." });
       }
 
-      // Hash da senha
-      const hashedPassword = await hashPassword(userData.password);
-
-      // Criar novo usuário com senha hasheada
-      const newUser = await storage.createUser({
-        ...userData,
-        password: hashedPassword,
-      });
+      // Criar novo usuário (storage.createUser já faz o hash da senha)
+      const newUser = await storage.createUser(userData);
 
       // Configurar a sessão
       req.session.userId = newUser.id;
@@ -194,8 +188,8 @@ export function setupAuth(app: Express) {
         return res.status(401).json({ message: "Credenciais inválidas." });
       }
 
-      // Verificar senha
-      const passwordValid = await comparePasswords(password, user.password);
+      // Verificar senha usando o método de validação do storage (bcrypt)
+      const passwordValid = await storage.validatePassword(password, user.password);
       if (!passwordValid) {
         return res.status(401).json({ message: "Credenciais inválidas." });
       }
