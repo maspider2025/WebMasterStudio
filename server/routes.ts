@@ -612,6 +612,520 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============= E-COMMERCE API ROUTES =============
+
+  // Product Category routes
+  app.get(`${apiPrefix}/projects/:projectId/product-categories`, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const project = await db.query.projects.findFirst({
+        where: eq(schema.projects.id, projectId),
+      });
+
+      if (!project) {
+        return res.status(404).json({ message: 'Project not found' });
+      }
+
+      const categories = await db.query.productCategories.findMany({
+        where: eq(schema.productCategories.projectId, projectId),
+        orderBy: [{ column: schema.productCategories.order, order: 'asc' }],
+      });
+
+      res.status(200).json(categories);
+    } catch (error) {
+      console.error('Error fetching product categories:', error);
+      res.status(500).json({ message: 'Failed to fetch product categories' });
+    }
+  });
+
+  app.get(`${apiPrefix}/product-categories/:id`, async (req, res) => {
+    try {
+      const categoryId = parseInt(req.params.id);
+      const category = await db.query.productCategories.findFirst({
+        where: eq(schema.productCategories.id, categoryId),
+        with: {
+          products: {
+            with: {
+              product: true
+            }
+          }
+        }
+      });
+
+      if (!category) {
+        return res.status(404).json({ message: 'Category not found' });
+      }
+
+      res.status(200).json(category);
+    } catch (error) {
+      console.error('Error fetching product category:', error);
+      res.status(500).json({ message: 'Failed to fetch product category' });
+    }
+  });
+
+  // Product routes
+  app.get(`${apiPrefix}/projects/:projectId/products`, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const { featured, categoryId, search, limit } = req.query;
+      const limitNumber = limit ? parseInt(limit as string) : undefined;
+
+      let query = db.select()
+        .from(schema.products)
+        .where(eq(schema.products.projectId, projectId));
+
+      // Apply filters
+      if (featured === 'true') {
+        query = query.where(eq(schema.products.featured, true));
+      }
+
+      if (search) {
+        query = query.where(
+          or(
+            like(schema.products.name, `%${search}%`),
+            like(schema.products.description, `%${search}%`)
+          )
+        );
+      }
+
+      // Get the results
+      let products = await query.limit(limitNumber || 100);
+
+      // Filter by category if needed
+      if (categoryId) {
+        const categoryIdNum = parseInt(categoryId as string);
+        const productCategoryRelations = await db.query.productCategoryRelations.findMany({
+          where: eq(schema.productCategoryRelations.categoryId, categoryIdNum),
+        });
+
+        const productIds = productCategoryRelations.map(relation => relation.productId);
+        products = products.filter(product => productIds.includes(product.id));
+      }
+
+      // Get variants for each product
+      const productIds = products.map(product => product.id);
+      const variants = await db.query.productVariants.findMany({
+        where: sql`${schema.productVariants.productId} IN ${productIds}`,
+      });
+
+      // Map variants to products
+      const productsWithVariants = products.map(product => ({
+        ...product,
+        variants: variants.filter(variant => variant.productId === product.id)
+      }));
+
+      res.status(200).json(productsWithVariants);
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      res.status(500).json({ message: 'Failed to fetch products' });
+    }
+  });
+
+  app.get(`${apiPrefix}/products/:id`, async (req, res) => {
+    try {
+      const productId = parseInt(req.params.id);
+      const product = await db.query.products.findFirst({
+        where: eq(schema.products.id, productId),
+      });
+
+      if (!product) {
+        return res.status(404).json({ message: 'Product not found' });
+      }
+
+      // Get variants
+      const variants = await db.query.productVariants.findMany({
+        where: eq(schema.productVariants.productId, productId),
+      });
+
+      // Get categories
+      const productCategoryRelations = await db.query.productCategoryRelations.findMany({
+        where: eq(schema.productCategoryRelations.productId, productId),
+        with: {
+          category: true
+        }
+      });
+
+      const categories = productCategoryRelations.map(relation => relation.category);
+
+      res.status(200).json({
+        ...product,
+        variants,
+        categories
+      });
+    } catch (error) {
+      console.error('Error fetching product:', error);
+      res.status(500).json({ message: 'Failed to fetch product' });
+    }
+  });
+
+  // Cart routes
+  app.post(`${apiPrefix}/carts`, async (req, res) => {
+    try {
+      const { projectId } = req.body;
+      const sessionId = req.session.id || randomUUID();
+      const customerId = req.session.userId || null;
+
+      // Check if cart already exists for this session
+      const existingCart = await db.query.carts.findFirst({
+        where: and(
+          eq(schema.carts.sessionId, sessionId),
+          eq(schema.carts.projectId, projectId)
+        ),
+      });
+
+      if (existingCart) {
+        return res.status(200).json(existingCart);
+      }
+
+      // Create a new cart
+      const cartData = insertCartSchema.parse({
+        projectId,
+        sessionId,
+        customerId,
+        currency: 'USD',
+      });
+
+      const [newCart] = await db.insert(schema.carts).values(cartData).returning();
+      res.status(201).json(newCart);
+    } catch (error) {
+      console.error('Error creating cart:', error);
+      res.status(500).json({ message: 'Failed to create cart' });
+    }
+  });
+
+  app.get(`${apiPrefix}/carts/:id`, async (req, res) => {
+    try {
+      const cartId = parseInt(req.params.id);
+      const cart = await db.query.carts.findFirst({
+        where: eq(schema.carts.id, cartId),
+        with: {
+          items: {
+            with: {
+              product: true,
+              variant: true
+            }
+          }
+        }
+      });
+
+      if (!cart) {
+        return res.status(404).json({ message: 'Cart not found' });
+      }
+
+      let total = 0;
+      const items = cart.items.map(item => {
+        // Use variant price if available, otherwise product price
+        const price = item.variant?.price || item.product.price;
+        const salePrice = item.variant?.salePrice || item.product.salePrice;
+        const itemPrice = salePrice || price;
+        const subtotal = parseFloat(itemPrice) * item.quantity;
+        total += subtotal;
+
+        return {
+          ...item,
+          price: itemPrice,
+          subtotal
+        };
+      });
+
+      res.status(200).json({
+        ...cart,
+        items,
+        total
+      });
+    } catch (error) {
+      console.error('Error fetching cart:', error);
+      res.status(500).json({ message: 'Failed to fetch cart' });
+    }
+  });
+
+  app.post(`${apiPrefix}/carts/:id/items`, async (req, res) => {
+    try {
+      const cartId = parseInt(req.params.id);
+      const { productId, variantId, quantity } = req.body;
+
+      // Verify cart exists
+      const cart = await db.query.carts.findFirst({
+        where: eq(schema.carts.id, cartId),
+      });
+
+      if (!cart) {
+        return res.status(404).json({ message: 'Cart not found' });
+      }
+
+      // Check if item already exists in cart
+      let existingItem = null;
+      if (variantId) {
+        existingItem = await db.query.cartItems.findFirst({
+          where: and(
+            eq(schema.cartItems.cartId, cartId),
+            eq(schema.cartItems.productId, productId),
+            eq(schema.cartItems.variantId, variantId)
+          ),
+        });
+      } else {
+        existingItem = await db.query.cartItems.findFirst({
+          where: and(
+            eq(schema.cartItems.cartId, cartId),
+            eq(schema.cartItems.productId, productId),
+            sql`${schema.cartItems.variantId} IS NULL`
+          ),
+        });
+      }
+
+      if (existingItem) {
+        // Update quantity
+        const newQuantity = existingItem.quantity + (quantity || 1);
+        const [updatedItem] = await db.update(schema.cartItems)
+          .set({ quantity: newQuantity })
+          .where(eq(schema.cartItems.id, existingItem.id))
+          .returning();
+
+        return res.status(200).json(updatedItem);
+      }
+
+      // Create new cart item
+      const cartItemData = insertCartItemSchema.parse({
+        cartId,
+        productId,
+        variantId,
+        quantity: quantity || 1,
+      });
+
+      const [newCartItem] = await db.insert(schema.cartItems).values(cartItemData).returning();
+      res.status(201).json(newCartItem);
+    } catch (error) {
+      console.error('Error adding item to cart:', error);
+      res.status(500).json({ message: 'Failed to add item to cart' });
+    }
+  });
+
+  app.delete(`${apiPrefix}/carts/:cartId/items/:itemId`, async (req, res) => {
+    try {
+      const cartId = parseInt(req.params.cartId);
+      const itemId = parseInt(req.params.itemId);
+
+      // Verify cart exists
+      const cart = await db.query.carts.findFirst({
+        where: eq(schema.carts.id, cartId),
+      });
+
+      if (!cart) {
+        return res.status(404).json({ message: 'Cart not found' });
+      }
+
+      // Verify cart item exists
+      const cartItem = await db.query.cartItems.findFirst({
+        where: and(
+          eq(schema.cartItems.id, itemId),
+          eq(schema.cartItems.cartId, cartId)
+        ),
+      });
+
+      if (!cartItem) {
+        return res.status(404).json({ message: 'Cart item not found' });
+      }
+
+      // Delete cart item
+      await db.delete(schema.cartItems).where(eq(schema.cartItems.id, itemId));
+      res.status(204).end();
+    } catch (error) {
+      console.error('Error removing item from cart:', error);
+      res.status(500).json({ message: 'Failed to remove item from cart' });
+    }
+  });
+
+  app.put(`${apiPrefix}/carts/:cartId/items/:itemId`, async (req, res) => {
+    try {
+      const cartId = parseInt(req.params.cartId);
+      const itemId = parseInt(req.params.itemId);
+      const { quantity } = req.body;
+
+      // Verify cart exists
+      const cart = await db.query.carts.findFirst({
+        where: eq(schema.carts.id, cartId),
+      });
+
+      if (!cart) {
+        return res.status(404).json({ message: 'Cart not found' });
+      }
+
+      // Verify cart item exists
+      const cartItem = await db.query.cartItems.findFirst({
+        where: and(
+          eq(schema.cartItems.id, itemId),
+          eq(schema.cartItems.cartId, cartId)
+        ),
+      });
+
+      if (!cartItem) {
+        return res.status(404).json({ message: 'Cart item not found' });
+      }
+
+      // Update cart item quantity
+      const [updatedItem] = await db.update(schema.cartItems)
+        .set({ quantity })
+        .where(eq(schema.cartItems.id, itemId))
+        .returning();
+
+      res.status(200).json(updatedItem);
+    } catch (error) {
+      console.error('Error updating cart item:', error);
+      res.status(500).json({ message: 'Failed to update cart item' });
+    }
+  });
+
+  // Checkout & Order routes
+  app.post(`${apiPrefix}/orders`, async (req, res) => {
+    try {
+      const { projectId, cartId, customer, shippingAddress, billingAddress, paymentMethod, shippingMethod } = req.body;
+      const customerId = req.session.userId || null;
+
+      // Get the cart with its items
+      const cart = await db.query.carts.findFirst({
+        where: eq(schema.carts.id, cartId),
+        with: {
+          items: {
+            with: {
+              product: true,
+              variant: true
+            }
+          }
+        }
+      });
+
+      if (!cart) {
+        return res.status(404).json({ message: 'Cart not found' });
+      }
+
+      // Calculate order totals
+      let subtotal = 0;
+      cart.items.forEach(item => {
+        const price = item.variant?.price || item.product.price;
+        const salePrice = item.variant?.salePrice || item.product.salePrice;
+        const itemPrice = salePrice || price;
+        subtotal += parseFloat(itemPrice) * item.quantity;
+      });
+
+      const tax = subtotal * 0.1; // 10% tax for demo
+      const shipping = 10; // Fixed shipping cost for demo
+      const total = subtotal + tax + shipping;
+
+      // Generate a unique order number
+      const orderNumber = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+      // Create the order
+      const [newOrder] = await db.insert(schema.orders).values({
+        projectId,
+        customerId,
+        orderNumber,
+        status: 'pending',
+        paymentStatus: 'pending',
+        shippingStatus: 'pending',
+        currency: cart.currency || 'USD',
+        subtotal: subtotal.toString(),
+        tax: tax.toString(),
+        shipping: shipping.toString(),
+        total: total.toString(),
+        paymentMethod,
+        shippingMethod,
+        metadata: JSON.stringify({ customer, shippingAddress, billingAddress })
+      }).returning();
+
+      // Create order items
+      for (const item of cart.items) {
+        const price = item.variant?.price || item.product.price;
+        const salePrice = item.variant?.salePrice || item.product.salePrice;
+        const itemPrice = salePrice || price;
+        const subtotal = parseFloat(itemPrice) * item.quantity;
+
+        await db.insert(schema.orderItems).values({
+          orderId: newOrder.id,
+          productId: item.productId,
+          variantId: item.variantId,
+          name: item.variant?.name || item.product.name,
+          sku: item.variant?.sku || item.product.sku,
+          quantity: item.quantity,
+          price: itemPrice,
+          subtotal: subtotal.toString()
+        });
+      }
+
+      // Empty the cart
+      await db.delete(schema.cartItems).where(eq(schema.cartItems.cartId, cartId));
+
+      // Return the new order
+      const completeOrder = await db.query.orders.findFirst({
+        where: eq(schema.orders.id, newOrder.id),
+        with: {
+          items: true
+        }
+      });
+
+      res.status(201).json(completeOrder);
+    } catch (error) {
+      console.error('Error creating order:', error);
+      res.status(500).json({ message: 'Failed to create order' });
+    }
+  });
+
+  app.get(`${apiPrefix}/orders/:id`, async (req, res) => {
+    try {
+      const orderId = parseInt(req.params.id);
+      const order = await db.query.orders.findFirst({
+        where: eq(schema.orders.id, orderId),
+        with: {
+          items: {
+            with: {
+              product: true,
+              variant: true
+            }
+          }
+        }
+      });
+
+      if (!order) {
+        return res.status(404).json({ message: 'Order not found' });
+      }
+
+      res.status(200).json(order);
+    } catch (error) {
+      console.error('Error fetching order:', error);
+      res.status(500).json({ message: 'Failed to fetch order' });
+    }
+  });
+
+  // Payment integration routes
+  if (stripeInstance) {
+    app.post(`${apiPrefix}/create-payment-intent`, async (req, res) => {
+      try {
+        const { amount } = req.body;
+        const paymentIntent = await stripeInstance.paymentIntents.create({
+          amount: Math.round(amount * 100), // Convert to cents
+          currency: "usd",
+        });
+        res.json({ clientSecret: paymentIntent.client_secret });
+      } catch (error: any) {
+        res
+          .status(500)
+          .json({ message: "Error creating payment intent: " + error.message });
+      }
+    });
+  }
+
+  // PayPal routes
+  app.get("/api/paypal/setup", async (req, res) => {
+    await loadPaypalDefault(req, res);
+  });
+
+  app.post("/api/paypal/order", async (req, res) => {
+    await createPaypalOrder(req, res);
+  });
+
+  app.post("/api/paypal/order/:orderID/capture", async (req, res) => {
+    await capturePaypalOrder(req, res);
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
