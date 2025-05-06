@@ -12,6 +12,7 @@ export enum ElementTypes {
   section = 'section',
   divider = 'divider',
   input = 'input',
+  textarea = 'textarea',
   checkbox = 'checkbox',
   select = 'select',
   form = 'form',
@@ -228,6 +229,21 @@ export const elementTypes: Record<string, ElementType> = {
       borderRadius: '4px',
       padding: '8px 12px',
       backgroundColor: 'white'
+    }
+  },
+  textarea: {
+    type: ElementTypes.textarea,
+    name: 'Área de texto',
+    icon: '📏',
+    defaultWidth: 300,
+    defaultHeight: 120,
+    defaultStyles: {
+      border: '1px solid #d1d5db',
+      borderRadius: '4px',
+      padding: '8px 12px',
+      backgroundColor: 'white',
+      resize: 'vertical',
+      minHeight: '80px'
     }
   },
   checkbox: {

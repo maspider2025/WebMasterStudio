@@ -367,9 +367,11 @@ export const FormSubmitButton = ({ element, isEditMode }: FormFieldProps) => {
 
 /**
  * Componente de formulário completo que contém campos e gerencia submissão
+ * Este componente serve como um container para os campos de formulário,
+ * permitindo total customização de cada elemento interno.
  */
-export const FormComponent = ({ element, isEditMode }: FormFieldProps) => {
-  const { elements } = useEditorStore();
+export const FormComponent = ({ element, isEditMode, onChange }: FormFieldProps) => {
+  const { elements, addElement, updateElement } = useEditorStore();
   
   // Encontra todos os elementos filhos do formulário
   const getChildElements = () => {
@@ -388,64 +390,298 @@ export const FormComponent = ({ element, isEditMode }: FormFieldProps) => {
       return;
     }
     
-    // Aqui implementar integração com o banco de dados se não estiver em modo de edição
+    // Obtém todos os dados do formulário para envio
+    const formData = new FormData(e.target as HTMLFormElement);
+    const formValues: Record<string, string> = {};
+    
+    formData.forEach((value, key) => {
+      formValues[key] = value.toString();
+    });
+    
+    console.log('Dados do formulário a serem enviados:', formValues);
+    
+    // TODO: Implementar integração com o banco de dados
+    // Usaremos a tabela com o mesmo nome do formulário (ou slug do mesmo)
+    const formName = element.name || 'formulario';
+    const tableName = generateFieldId(formName);
+    
+    // Aqui faríamos o envio dos dados para a API
+    /*
+    fetch(`/api/${tableName}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(formValues)
+    })
+    .then(response => response.json())
+    .then(data => {
+      console.log('Sucesso:', data);
+      // Exibir mensagem de sucesso ou redirecionar
+    })
+    .catch(error => {
+      console.error('Erro:', error);
+      // Exibir mensagem de erro
+    });
+    */
   };
   
+  // Função para adicionar um novo campo ao formulário (usado no modo de edição)
+  const addFieldToForm = (fieldType: ElementTypes) => {
+    if (!isEditMode) return;
+    
+    // Determinar o tipo de campo a ser adicionado
+    let newField: Partial<Element> = {
+      type: fieldType,
+      parent: element.id, // Conecta o novo campo ao formulário pai
+      x: 0, // Posições relativas dentro do formulário
+      y: 0,
+      width: 300,
+      height: 40,
+    };
+    
+    // Configurações específicas para cada tipo de campo
+    switch(fieldType) {
+      case ElementTypes.input:
+        newField = {
+          ...newField,
+          name: 'Campo de Texto',
+          htmlAttributes: {
+            name: `campo_${Date.now()}`, // ID único baseado no timestamp
+            label: 'Novo Campo',
+            placeholder: 'Digite aqui...',
+            'data-db-type': 'string'
+          }
+        };
+        break;
+      case ElementTypes.textarea:
+        newField = {
+          ...newField,
+          name: 'Área de Texto',
+          htmlAttributes: {
+            name: `area_${Date.now()}`,
+            label: 'Nova Área de Texto',
+            placeholder: 'Digite um texto mais longo aqui...',
+            rows: '4',
+            'data-db-type': 'text'
+          },
+          height: 120
+        };
+        break;
+      case ElementTypes.select:
+        newField = {
+          ...newField,
+          name: 'Campo de Seleção',
+          htmlAttributes: {
+            name: `selecao_${Date.now()}`,
+            label: 'Nova Seleção',
+            options: JSON.stringify([
+              { value: '', label: 'Selecione uma opção' },
+              { value: 'opcao1', label: 'Opção 1' },
+              { value: 'opcao2', label: 'Opção 2' }
+            ]),
+            'data-db-type': 'string'
+          }
+        };
+        break;
+      case ElementTypes.checkbox:
+        newField = {
+          ...newField,
+          name: 'Campo de Checkbox',
+          htmlAttributes: {
+            name: `checkbox_${Date.now()}`,
+            label: 'Novo Checkbox',
+            'data-db-type': 'boolean'
+          },
+          height: 24,
+          width: 24
+        };
+        break;
+      case ElementTypes.button:
+        newField = {
+          ...newField,
+          name: 'Botão de Envio',
+          content: 'Enviar',
+          htmlAttributes: {
+            type: 'submit'
+          },
+          width: 120,
+          height: 40,
+          styles: {
+            backgroundColor: '#3b82f6',
+            color: 'white',
+            padding: '8px 16px',
+            borderRadius: '4px',
+            fontWeight: '500',
+            cursor: 'pointer'
+          }
+        };
+        break;
+    }
+    
+    // Adiciona o campo ao editor
+    const newFieldId = addElement(newField as Element);
+    
+    // Adiciona o campo como filho do formulário
+    if (element.children) {
+      updateElement(element.id, {
+        children: [...element.children, newFieldId]
+      });
+    } else {
+      updateElement(element.id, {
+        children: [newFieldId]
+      });
+    }
+  };
+  
+  const formStyle = isEditMode ? {
+    border: '1px dashed #3b82f6',
+    backgroundColor: 'rgba(59, 130, 246, 0.05)',
+    minHeight: '200px'
+  } : {};
+  
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 w-full h-full overflow-auto p-4">
-      {childElements.length > 0 ? (
-        childElements.map((childElement) => renderFormElement(childElement, isEditMode))
-      ) : (
-        <div className="flex flex-col gap-4">
-          <FormTextField
-            element={{
-              ...element,
-              htmlAttributes: {
-                name: 'nome',
-                label: 'Nome',
-                placeholder: 'Seu nome',
-                required: 'true'
-              }
-            }}
-            isEditMode={isEditMode}
-          />
-          <FormTextField
-            element={{
-              ...element,
-              htmlAttributes: {
-                name: 'email',
-                type: 'email',
-                label: 'Email',
-                placeholder: 'seu@email.com',
-                required: 'true'
-              }
-            }}
-            isEditMode={isEditMode}
-          />
-          <FormTextareaField
-            element={{
-              ...element,
-              htmlAttributes: {
-                name: 'mensagem',
-                label: 'Mensagem',
-                placeholder: 'Digite sua mensagem...',
-                required: 'true'
-              }
-            }}
-            isEditMode={isEditMode}
-          />
-          <div className="flex justify-center">
-            <FormSubmitButton
-              element={{
-                ...element,
-                content: 'Enviar'
-              }}
-              isEditMode={isEditMode}
-            />
+    <div className="w-full h-full overflow-auto">
+      {isEditMode && (
+        <div className="bg-background border border-border rounded-t-md p-2 mb-2">
+          <div className="text-sm font-medium mb-2">Formulário: {element.name || 'Sem Nome'}</div>
+          <div className="flex flex-wrap gap-2">
+            <button 
+              onClick={() => addFieldToForm(ElementTypes.input)}
+              className="px-2 py-1 bg-primary text-primary-foreground text-xs rounded hover:bg-primary/90"
+            >
+              + Campo de Texto
+            </button>
+            <button 
+              onClick={() => addFieldToForm(ElementTypes.textarea)}
+              className="px-2 py-1 bg-primary text-primary-foreground text-xs rounded hover:bg-primary/90"
+            >
+              + Área de Texto
+            </button>
+            <button 
+              onClick={() => addFieldToForm(ElementTypes.select)}
+              className="px-2 py-1 bg-primary text-primary-foreground text-xs rounded hover:bg-primary/90"
+            >
+              + Campo de Seleção
+            </button>
+            <button 
+              onClick={() => addFieldToForm(ElementTypes.checkbox)}
+              className="px-2 py-1 bg-primary text-primary-foreground text-xs rounded hover:bg-primary/90"
+            >
+              + Checkbox
+            </button>
+            <button 
+              onClick={() => addFieldToForm(ElementTypes.button)}
+              className="px-2 py-1 bg-primary text-primary-foreground text-xs rounded hover:bg-primary/90"
+            >
+              + Botão
+            </button>
           </div>
         </div>
       )}
-    </form>
+      
+      <form 
+        onSubmit={handleSubmit} 
+        className="space-y-4 w-full p-4"
+        style={formStyle}
+      >
+        {childElements.length > 0 ? (
+          <>
+            {childElements.map((childElement) => renderFormElement(childElement, isEditMode))}
+            
+            {isEditMode && childElements.length > 0 && !childElements.some(el => el.type === ElementTypes.button) && (
+              <div className="flex justify-center pt-4">
+                <button 
+                  onClick={() => addFieldToForm(ElementTypes.button)}
+                  className="px-2 py-1 border border-primary text-primary text-xs rounded hover:bg-primary/10"
+                  type="button"
+                >
+                  + Adicionar Botão de Envio
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {isEditMode ? (
+              <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+                <p className="mb-4">Clique nos botões acima para adicionar campos ao formulário</p>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => {
+                      // Adiciona campos básicos de exemplo
+                      addFieldToForm(ElementTypes.input);
+                      setTimeout(() => addFieldToForm(ElementTypes.input), 100);
+                      setTimeout(() => addFieldToForm(ElementTypes.select), 200);
+                      setTimeout(() => addFieldToForm(ElementTypes.button), 300);
+                    }}
+                    className="px-3 py-2 bg-primary text-primary-foreground text-sm rounded hover:bg-primary/90"
+                    type="button"
+                  >
+                    Adicionar Campos de Exemplo
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Formulário exemplo para quando não há campos configurados e não está em modo de edição */}
+                <FormTextField
+                  element={{
+                    ...element,
+                    id: `${element.id}_nome`,
+                    htmlAttributes: {
+                      name: 'nome',
+                      label: 'Nome',
+                      placeholder: 'Seu nome',
+                      required: 'true',
+                      'data-db-type': 'string'
+                    }
+                  }}
+                  isEditMode={false}
+                />
+                <FormTextField
+                  element={{
+                    ...element,
+                    id: `${element.id}_email`,
+                    htmlAttributes: {
+                      name: 'email',
+                      type: 'email',
+                      label: 'Email',
+                      placeholder: 'seu@email.com',
+                      required: 'true',
+                      'data-db-type': 'string'
+                    }
+                  }}
+                  isEditMode={false}
+                />
+                <FormTextareaField
+                  element={{
+                    ...element,
+                    id: `${element.id}_mensagem`,
+                    htmlAttributes: {
+                      name: 'mensagem',
+                      label: 'Mensagem',
+                      placeholder: 'Digite sua mensagem...',
+                      required: 'true',
+                      'data-db-type': 'text'
+                    }
+                  }}
+                  isEditMode={false}
+                />
+                <div className="flex justify-center">
+                  <FormSubmitButton
+                    element={{
+                      ...element,
+                      id: `${element.id}_submit`,
+                      content: 'Enviar'
+                    }}
+                    isEditMode={false}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </form>
+    </div>
   );
 };
 
@@ -460,6 +696,8 @@ export const renderFormElement = (element: Element, isEditMode: boolean) => {
       return <FormSelectField key={element.id} element={element} isEditMode={isEditMode} />;
     case ElementTypes.checkbox:
       return <FormCheckboxField key={element.id} element={element} isEditMode={isEditMode} />;
+    case ElementTypes.textarea:
+      return <FormTextareaField key={element.id} element={element} isEditMode={isEditMode} />;
     case ElementTypes.form:
       return <FormComponent key={element.id} element={element} isEditMode={isEditMode} />;
     case ElementTypes.button:
