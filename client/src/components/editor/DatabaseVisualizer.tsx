@@ -99,15 +99,42 @@ export function DatabaseVisualizer({ projectId = '1' }: DatabaseVisualizerProps)
     setTableData(null);
     
     try {
-      const response = await apiRequest('GET', `/api/database/tables/${tableName}/data`);
-      const data = await response.json();
+      // Buscar schema da tabela para as informações estruturais
+      const schemaResponse = await apiRequest('GET', `/api/database/tables/${tableName}/schema`);
+      const schemaData = await schemaResponse.json();
       
-      if (response.ok) {
-        setTableData(data);
+      // Buscar os dados da tabela
+      const dataResponse = await apiRequest('GET', `/api/database/tables/${tableName}/data`);
+      const dataResult = await dataResponse.json();
+      
+      if (schemaResponse.ok && dataResponse.ok) {
+        // Formatar os dados para o componente
+        const columns = schemaData.columns.map((col: any) => col.column_name);
+        
+        setTableData({
+          columns,
+          rows: dataResult.data || [],
+          totalCount: dataResult.meta?.pagination?.total || 0
+        });
+        
+        // Atualizar o objeto selectedTableData com informações da tabela
+        const tableInfo = tables.find(t => t.name === tableName);
+        if (tableInfo) {
+          // Se não tiver as informações de colunas do backend, criar do schema
+          if (!tableInfo.columns || tableInfo.columns.length === 0) {
+            tableInfo.columns = schemaData.columns.map((col: any) => ({
+              name: col.column_name,
+              type: col.data_type,
+              nullable: col.is_nullable === 'YES',
+              isPrimary: schemaData.primaryKeys?.includes(col.column_name) || false,
+              description: ''
+            }));
+          }
+        }
       } else {
         toast({
           title: "Erro ao carregar dados",
-          description: data.message || "Não foi possível carregar os dados da tabela.",
+          description: dataResult.message || "Não foi possível carregar os dados da tabela.",
           variant: "destructive"
         });
       }
@@ -205,6 +232,203 @@ export function DatabaseVisualizer({ projectId = '1' }: DatabaseVisualizerProps)
           )}
         </CardContent>
       </Card>
+      
+      {/* Diálogo para visualizar dados da tabela */}
+      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedTable && (
+                <div className="flex items-center gap-2">
+                  <Database className="h-5 w-5" />
+                  <span>Tabela: {selectedTable}</span>
+                </div>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedTableData?.description || "Visualize os dados e a estrutura da tabela."}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <Tabs defaultValue="data" value={activeTab} onValueChange={(value) => setActiveTab(value as "data" | "schema" | "api")}>
+            <TabsList className="mb-4">
+              <TabsTrigger value="data" className="flex items-center gap-1">
+                <Table2 className="h-4 w-4" />
+                Dados
+              </TabsTrigger>
+              <TabsTrigger value="schema" className="flex items-center gap-1">
+                <Code className="h-4 w-4" />
+                Estrutura
+              </TabsTrigger>
+              <TabsTrigger value="api" className="flex items-center gap-1">
+                <Server className="h-4 w-4" />
+                API
+              </TabsTrigger>
+            </TabsList>
+            
+            <div className="flex-1 overflow-auto">
+              <TabsContent value="data" className="h-full">
+                {isTableDataLoading ? (
+                  <div className="flex flex-col items-center justify-center h-64">
+                    <RefreshCw className="h-8 w-8 animate-spin mb-4" />
+                    <p>Carregando dados da tabela...</p>
+                  </div>
+                ) : !tableData || !tableData.columns || tableData.columns.length === 0 ? (
+                  <div className="text-center py-12">
+                    <p>Sem dados disponíveis ou tabela vazia.</p>
+                  </div>
+                ) : (
+                  <div className="border rounded-md overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          {tableData.columns.map((column, index) => (
+                            <TableHead key={index} className="whitespace-nowrap">
+                              {column}
+                            </TableHead>
+                          ))}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {tableData.rows.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={tableData.columns.length} className="text-center h-32">
+                              Nenhum registro encontrado
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          tableData.rows.map((row, rowIndex) => (
+                            <TableRow key={rowIndex}>
+                              {tableData.columns.map((column, colIndex) => {
+                                const value = row[column];
+                                let displayValue: React.ReactNode = "—";
+                                
+                                if (value !== null && value !== undefined) {
+                                  if (typeof value === 'object') {
+                                    displayValue = <pre className="text-xs">{JSON.stringify(value, null, 2)}</pre>;
+                                  } else if (typeof value === 'boolean') {
+                                    displayValue = value ? "Sim" : "Não";
+                                  } else {
+                                    displayValue = String(value);
+                                  }
+                                }
+                                
+                                return (
+                                  <TableCell key={colIndex} className="max-w-[300px] truncate">
+                                    {displayValue}
+                                  </TableCell>
+                                );
+                              })}
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+                
+                <p className="text-xs text-muted-foreground mt-2 text-right">
+                  {tableData ? `${tableData.rows.length} de ${tableData.totalCount} registros` : "Sem dados"}
+                </p>
+              </TabsContent>
+              
+              <TabsContent value="schema" className="h-full">
+                <div className="border rounded-md overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nome da coluna</TableHead>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Nulo</TableHead>
+                        <TableHead>Chave</TableHead>
+                        <TableHead>Descrição</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {selectedTableData?.columns && selectedTableData.columns.length > 0 ? (
+                        selectedTableData.columns.map((column, index) => (
+                          <TableRow key={index}>
+                            <TableCell className="font-medium">{column.name}</TableCell>
+                            <TableCell>{column.type}</TableCell>
+                            <TableCell>{column.nullable ? "Sim" : "Não"}</TableCell>
+                            <TableCell>
+                              {column.isPrimary ? "Primária" : (column.isForeign ? "Estrangeira" : "")}
+                            </TableCell>
+                            <TableCell>{column.description || "—"}</TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center h-32">
+                            Informações não disponíveis
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </TabsContent>
+              
+              <TabsContent value="api" className="h-full">
+                {selectedTableData?.hasApi ? (
+                  <div className="space-y-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-sm">Endpoints disponíveis</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div>
+                          <Label className="text-xs font-medium">GET - Obter todos</Label>
+                          <div className="bg-muted p-2 rounded-md mt-1 text-sm font-mono">
+                            /api/{selectedTable}
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <Label className="text-xs font-medium">GET - Obter por ID</Label>
+                          <div className="bg-muted p-2 rounded-md mt-1 text-sm font-mono">
+                            /api/{selectedTable}/:id
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <Label className="text-xs font-medium">POST - Criar novo</Label>
+                          <div className="bg-muted p-2 rounded-md mt-1 text-sm font-mono">
+                            /api/{selectedTable}
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <Label className="text-xs font-medium">PUT - Atualizar</Label>
+                          <div className="bg-muted p-2 rounded-md mt-1 text-sm font-mono">
+                            /api/{selectedTable}/:id
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <Label className="text-xs font-medium">DELETE - Remover</Label>
+                          <div className="bg-muted p-2 rounded-md mt-1 text-sm font-mono">
+                            /api/{selectedTable}/:id
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-64 text-center">
+                    <Server className="h-10 w-10 text-muted-foreground mb-4" />
+                    <p className="mb-2">Essa tabela não possui API gerada.</p>
+                    <p className="text-sm text-muted-foreground max-w-md">
+                      Para ter endpoints de API automaticamente gerados, crie a tabela através do assistente
+                      ou adicione manualmente as rotas no servidor.
+                    </p>
+                  </div>
+                )}
+              </TabsContent>
+            </div>
+          </Tabs>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
