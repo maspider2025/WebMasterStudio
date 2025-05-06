@@ -190,6 +190,77 @@ const Canvas = ({ viewMode, zoom }: CanvasProps) => {
 
           <TabsContent value="editor" className="mt-3">
             <div className="relative w-full bg-muted rounded-lg shadow-lg p-4 border border-border">
+              {/* Canvas controls */}
+              <div className="flex flex-wrap gap-2 mb-3">
+                <div className="flex items-center space-x-1">
+                  <Button variant="outline" size="sm" onClick={() => useEditorStore.getState().undo()} title="Desfazer (Ctrl+Z)">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                    </svg>
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => useEditorStore.getState().redo()} title="Refazer (Ctrl+Y)">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 10H11a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
+                    </svg>
+                  </Button>
+                </div>
+
+                <div className="h-6 w-px bg-border mx-1"></div>
+
+                <div className="flex items-center space-x-1">
+                  <Button variant="outline" size="sm" onClick={() => useEditorStore.getState().toggleGrid()} 
+                    className={useEditorStore.getState().showGrid ? 'bg-primary/20' : ''} title="Mostrar/Esconder Grade">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                    </svg>
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => useEditorStore.getState().toggleSnapToGrid()} 
+                    className={useEditorStore.getState().snapToGrid ? 'bg-primary/20' : ''} title="Ativar/Desativar Ajuste à Grade">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+                    </svg>
+                  </Button>
+                </div>
+
+                <div className="h-6 w-px bg-border mx-1"></div>
+
+                <div className="flex items-center space-x-1">
+                  <Button variant="outline" size="sm" onClick={() => useEditorStore.getState().saveProject()} title="Salvar Projeto">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                    </svg>
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => useEditorStore.getState().toggleFullscreenPreview()} 
+                    title="Visualização em Tela Cheia">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
+                    </svg>
+                  </Button>
+                </div>
+
+                <div className="h-6 w-px bg-border mx-1"></div>
+
+                <div className="flex items-center space-x-1">
+                  <select
+                    className="h-8 w-36 rounded-md border border-input bg-background px-3 py-1 text-xs ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    value={useEditorStore.getState().currentPageId || ''}
+                    onChange={(e) => useEditorStore.getState().setCurrentPage(e.target.value)}
+                  >
+                    {useEditorStore.getState().allPages.map(page => (
+                      <option key={page.id} value={page.id}>{page.name}</option>
+                    ))}
+                    {useEditorStore.getState().allPages.length === 0 && (
+                      <option value="">Página Principal</option>
+                    )}
+                  </select>
+                  <Button variant="outline" size="sm" title="Adicionar Nova Página">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                  </Button>
+                </div>
+              </div>
+
               <div 
                 id="editor-canvas"
                 ref={(node) => {
@@ -201,13 +272,22 @@ const Canvas = ({ viewMode, zoom }: CanvasProps) => {
                     canvasRef.current = node as HTMLDivElement;
                   }
                 }}
-                className="canvas-grid w-full bg-white shadow-xl relative overflow-y-auto mx-auto rounded-md"
+                className={`w-full bg-white shadow-xl relative overflow-y-auto mx-auto rounded-md ${
+                  useEditorStore.getState().showGrid ? 'canvas-grid' : ''
+                } ${
+                  useEditorStore.getState().gridSize === 'small' ? 'grid-small' : 
+                  useEditorStore.getState().gridSize === 'medium' ? 'grid-medium' : 
+                  useEditorStore.getState().gridSize === 'large' ? 'grid-large' : ''
+                }`}
                 style={{ 
                   width: getViewModeWidth(),
                   minHeight: 600,
                   maxHeight: 800,
                   transform: `scale(${zoom / 100})`,
-                  transformOrigin: 'center top'
+                  transformOrigin: 'center top',
+                  backgroundSize: useEditorStore.getState().gridSize === 'small' ? '8px 8px' : 
+                                  useEditorStore.getState().gridSize === 'medium' ? '16px 16px' : 
+                                  useEditorStore.getState().gridSize === 'large' ? '32px 32px' : '16px 16px',
                 }}
               >
                 {/* Render the elements */}

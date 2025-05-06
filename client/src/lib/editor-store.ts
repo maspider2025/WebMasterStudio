@@ -2,6 +2,53 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { ElementTypes } from './element-types';
 
+export interface ElementAnimation {
+  type: 'fade' | 'slide' | 'scale' | 'rotate' | 'custom';
+  duration: number;
+  delay?: number;
+  easing?: string;
+  direction?: 'in' | 'out' | 'inOut';
+  repeat?: number;
+  customKeyframes?: string;
+}
+
+export interface ElementAction {
+  type: 'link' | 'scroll' | 'toggle' | 'modal' | 'api' | 'custom';
+  target?: string;
+  url?: string;
+  params?: Record<string, any>;
+  script?: string;
+  eventType: 'click' | 'hover' | 'load' | 'scroll' | 'custom';
+  customEvent?: string;
+}
+
+export interface ElementTransform {
+  rotate?: number;
+  scaleX?: number;
+  scaleY?: number;
+  skewX?: number;
+  skewY?: number;
+}
+
+export interface ElementResponsive {
+  mobile?: Partial<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    visible: boolean;
+    styles: Record<string, any>;
+  }>;
+  tablet?: Partial<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    visible: boolean;
+    styles: Record<string, any>;
+  }>;
+}
+
 export interface Element {
   id: string;
   type: ElementTypes;
@@ -18,6 +65,31 @@ export interface Element {
   parent?: string;
   visible?: boolean;
   zIndex?: number;
+  locked?: boolean;
+  animations?: ElementAnimation[];
+  actions?: ElementAction[];
+  transform?: ElementTransform;
+  responsive?: ElementResponsive;
+  metadata?: Record<string, any>;
+  createdAt?: string;
+  updatedAt?: string;
+  cssClasses?: string[];
+  htmlAttributes?: Record<string, string>;
+  customCode?: {
+    html?: string;
+    css?: string;
+    js?: string;
+  };
+  seo?: {
+    title?: string;
+    description?: string;
+    keywords?: string;
+    openGraph?: {
+      title?: string;
+      description?: string;
+      image?: string;
+    };
+  };
 }
 
 export interface Project {
@@ -34,42 +106,166 @@ export interface Project {
   updatedAt: string;
 }
 
+export type EditorViewMode = 'desktop' | 'tablet' | 'mobile';
+export type EditorGridSize = 'none' | 'small' | 'medium' | 'large';
+export type EditorMode = 'design' | 'preview' | 'code';
+export type EditorTheme = 'light' | 'dark' | 'system';
+export type PageType = 'homepage' | 'product' | 'products' | 'checkout' | 'cart' | 'account' | 'contact' | 'about' | 'custom';
+
+export interface EditorPage {
+  id: string;
+  name: string;
+  slug: string;
+  type: PageType;
+  isHomepage: boolean;
+  elements: Element[];
+  metadata?: {
+    seo?: {
+      title?: string;
+      description?: string;
+      keywords?: string;
+    };
+    settings?: {
+      showHeader?: boolean;
+      showFooter?: boolean;
+      customScripts?: string;
+      customStyles?: string;
+    };
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface EditorState {
   // Elements and selection
   elements: Element[];
   selectedElementId: string | null;
+  multipleSelection: string[];
   copiedElement: Element | null;
+  copiedElements: Element[];
   history: Element[][];
   historyIndex: number;
+  recentColors: string[];
+  recentFonts: string[];
+  clipboard: {
+    elements: Element[];
+    type: 'cut' | 'copy' | null;
+  };
   
   // Project
   currentProject: Project | null;
   currentPageId: string | null;
+  allPages: EditorPage[];
+  recentProjects: string[];
   
   // Canvas state
   canvasWidth: number;
   canvasHeight: number;
+  zoom: number;
+  viewMode: EditorViewMode;
+  editorMode: EditorMode;
+  theme: EditorTheme;
+  gridSize: EditorGridSize;
+  showGuides: boolean;
+  showGrid: boolean;
+  snapToGrid: boolean;
+  snapToElements: boolean;
+  rulers: boolean;
+  fullscreenPreview: boolean;
   
-  // Actions
+  // UI State
+  activePanel: 'elements' | 'properties' | 'pages' | 'layers' | 'assets' | 'components' | 'templates' | null;
+  codeEditorOpen: boolean;
+  codeEditorHeight: number;
+  codeEditorLanguage: 'html' | 'css' | 'javascript' | 'json' | 'typescript' | 'jsx' | 'tsx';
+  codeEditorContent: string;
+  propertyPanelWidth: number;
+  elementLibraryWidth: number;
+  unsavedChanges: boolean;
+  
+  // Core Actions
   addElement: (element: Omit<Element, 'id'> & { id?: string }) => void;
   selectElement: (id: string | null) => void;
+  selectMultipleElements: (ids: string[]) => void;
+  toggleElementSelection: (id: string) => void;
   updateElementPosition: (id: string, dx: number, dy: number) => void;
   updateElementSize: (id: string, dimensions: Partial<{ width: number, height: number, x: number, y: number }>) => void;
   updateElementStyles: (id: string, styles: Record<string, any>) => void;
   updateElementContent: (id: string, updates: Partial<Omit<Element, 'id' | 'type'>>) => void;
   deleteElement: (id: string) => void;
+  deleteSelectedElements: () => void;
   duplicateElement: (id: string) => void;
+  duplicateSelectedElements: () => void;
   moveElementUp: (id: string) => void;
   moveElementDown: (id: string) => void;
+  moveElementToFront: (id: string) => void;
+  moveElementToBack: (id: string) => void;
   updateElementVisibility: (id: string, visible: boolean) => void;
+  lockElement: (id: string, locked: boolean) => void;
+  
+  // Advanced Element Operations
+  groupElements: (elementIds: string[]) => void;
+  ungroupElements: (groupId: string) => void;
+  alignElements: (elementIds: string[], alignment: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') => void;
+  distributeElements: (elementIds: string[], distribution: 'horizontal' | 'vertical') => void;
+  addAnimation: (elementId: string, animation: ElementAnimation) => void;
+  removeAnimation: (elementId: string, animationIndex: number) => void;
+  updateAnimation: (elementId: string, animationIndex: number, updates: Partial<ElementAnimation>) => void;
+  addAction: (elementId: string, action: ElementAction) => void;
+  removeAction: (elementId: string, actionIndex: number) => void;
+  updateAction: (elementId: string, actionIndex: number, updates: Partial<ElementAction>) => void;
+  updateResponsiveStyles: (elementId: string, deviceType: 'mobile' | 'tablet', styles: Partial<ElementResponsive['mobile']>) => void;
+  
+  // History Operations
   undo: () => void;
   redo: () => void;
   createSnapshot: () => void;
+  clearHistory: () => void;
+  
+  // Clipboard Operations
+  copyElement: (id: string) => void;
+  copySelectedElements: () => void;
+  cutElement: (id: string) => void;
+  cutSelectedElements: () => void;
+  paste: (x?: number, y?: number) => void;
+  
+  // Page & Project Operations
   loadTemplate: (elements: Element[]) => void;
   clearCanvas: () => void;
   saveProject: () => void;
   loadProject: (projectId: string) => Promise<void>;
   createNewProject: (name: string, description?: string) => void;
+  addPage: (page: Omit<EditorPage, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  removePage: (pageId: string) => void;
+  renamePage: (pageId: string, name: string) => void;
+  duplicatePage: (pageId: string) => void;
+  setCurrentPage: (pageId: string) => void;
+  updatePageMetadata: (pageId: string, metadata: Partial<EditorPage['metadata']>) => void;
+  importProject: (projectData: string) => void;
+  exportProject: () => string;
+  exportHtml: (pageId?: string) => string;
+  publishProject: () => Promise<{url: string}>;
+  
+  // UI Control
+  setViewMode: (mode: EditorViewMode) => void;
+  setEditorMode: (mode: EditorMode) => void;
+  setZoom: (zoom: number) => void;
+  togglePanel: (panel: EditorState['activePanel']) => void;
+  setActivePanel: (panel: EditorState['activePanel']) => void;
+  toggleCodeEditor: () => void;
+  setCodeEditorHeight: (height: number) => void;
+  setCodeEditorLanguage: (language: EditorState['codeEditorLanguage']) => void;
+  updateCodeEditorContent: (content: string) => void;
+  setGridSize: (size: EditorGridSize) => void;
+  toggleGuides: () => void;
+  toggleGrid: () => void;
+  toggleSnapToGrid: () => void;
+  toggleSnapToElements: () => void;
+  toggleRulers: () => void;
+  toggleFullscreenPreview: () => void;
+  setTheme: (theme: EditorTheme) => void;
+  resizePropertyPanel: (width: number) => void;
+  resizeElementLibrary: (width: number) => void;
 }
 
 // Helper to create a deep copy of elements array
@@ -77,26 +273,248 @@ const cloneElements = (elements: Element[]): Element[] => {
   return JSON.parse(JSON.stringify(elements));
 };
 
+// Helper to generate unique IDs
+const generateId = (prefix: string): string => {
+  return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+};
+
+// Helper for adding multiple elements at once
+const addMultipleElements = (elements: Element[], newElements: Element[]): Element[] => {
+  return [...elements, ...newElements];
+};
+
+// Helper for updating element properties
+const updateElementById = (elements: Element[], id: string, updates: Partial<Element>): Element[] => {
+  return elements.map((el) => {
+    if (el.id === id) {
+      return { ...el, ...updates };
+    }
+    return el;
+  });
+};
+
+// Helper for grid snapping
+const snapToGrid = (value: number, gridSize: number): number => {
+  return Math.round(value / gridSize) * gridSize;
+};
+
+// HTML template generator
+const generateHtml = (elements: Element[], includeStyles: boolean = true): string => {
+  let html = '<!DOCTYPE html>\n<html lang="pt-BR">\n<head>\n';
+  html += '  <meta charset="UTF-8">\n';
+  html += '  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n';
+  html += '  <title>Site exportado - NextGen Site Builder</title>\n';
+  
+  if (includeStyles) {
+    html += '  <style>\n';
+    html += '    body { margin: 0; padding: 0; font-family: Arial, sans-serif; }\n';
+    html += '    .element { position: absolute; }\n';
+    // Add more global styles
+    html += '  </style>\n';
+  }
+  
+  html += '</head>\n<body>\n';
+  html += '  <div class="page-container" style="position: relative; width: 100%; height: 100vh; overflow: hidden;">\n';
+  
+  // Sort elements by zIndex
+  const sortedElements = [...elements].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+  
+  // Add each element
+  sortedElements.forEach(element => {
+    if (element.visible === false) return;
+    
+    const styleAttr = element.styles ? 
+      `style="position: absolute; left: ${element.x}px; top: ${element.y}px; width: ${element.width}px; height: ${element.height}px; ${Object.entries(element.styles).map(([key, value]) => `${key}: ${value};`).join(' ')}"` : 
+      `style="position: absolute; left: ${element.x}px; top: ${element.y}px; width: ${element.width}px; height: ${element.height}px;"`;
+    
+    const classAttr = element.cssClasses?.length ? ` class="${element.cssClasses.join(' ')}"` : '';
+    const customAttrs = element.htmlAttributes ? 
+      Object.entries(element.htmlAttributes).map(([key, value]) => ` ${key}="${value}"`).join('') : '';
+    
+    switch (element.type) {
+      case 'text':
+        html += `  <div id="${element.id}"${classAttr} ${styleAttr}${customAttrs}>${element.content || ''}</div>\n`;
+        break;
+      case 'heading':
+        html += `  <h2 id="${element.id}"${classAttr} ${styleAttr}${customAttrs}>${element.content || ''}</h2>\n`;
+        break;
+      case 'paragraph':
+        html += `  <p id="${element.id}"${classAttr} ${styleAttr}${customAttrs}>${element.content || ''}</p>\n`;
+        break;
+      case 'button':
+        html += `  <button id="${element.id}"${classAttr} ${styleAttr}${customAttrs}>${element.content || ''}</button>\n`;
+        break;
+      case 'image':
+        html += `  <img id="${element.id}"${classAttr} ${styleAttr} src="${element.src || ''}" alt="${element.alt || ''}"${customAttrs} />\n`;
+        break;
+      case 'container':
+        html += `  <div id="${element.id}"${classAttr} ${styleAttr}${customAttrs}></div>\n`;
+        break;
+      case 'custom':
+        if (element.customCode?.html) {
+          html += `  ${element.customCode.html}\n`;
+        } else {
+          html += `  <div id="${element.id}"${classAttr} ${styleAttr}${customAttrs}>${element.content || ''}</div>\n`;
+        }
+        break;
+      default:
+        html += `  <div id="${element.id}"${classAttr} ${styleAttr}${customAttrs}>${element.content || ''}</div>\n`;
+    }
+  });
+  
+  html += '  </div>\n';
+  
+  // Add custom scripts
+  html += '  <script>\n';
+  html += '    // Generated JavaScript\n';
+  
+  // Add animation handlers
+  const elementsWithAnimations = elements.filter(el => el.animations && el.animations.length > 0);
+  if (elementsWithAnimations.length > 0) {
+    html += '    document.addEventListener(\'DOMContentLoaded\', function() {\n';
+    elementsWithAnimations.forEach(element => {
+      element.animations?.forEach((animation, index) => {
+        html += `      // Animation for ${element.id} - ${animation.type}\n`;
+        html += `      const element${element.id.replace(/-/g, '_')}_${index} = document.getElementById('${element.id}');\n`;
+        html += `      if (element${element.id.replace(/-/g, '_')}_${index}) {\n`;
+        
+        // Generate animation code based on type
+        switch (animation.type) {
+          case 'fade':
+            html += `        element${element.id.replace(/-/g, '_')}_${index}.style.transition = 'opacity ${animation.duration}ms ${animation.easing || 'ease'} ${animation.delay || 0}ms';\n`;
+            html += `        element${element.id.replace(/-/g, '_')}_${index}.style.opacity = '${animation.direction === 'out' ? '1' : '0'}';\n`;
+            html += `        setTimeout(() => { element${element.id.replace(/-/g, '_')}_${index}.style.opacity = '${animation.direction === 'out' ? '0' : '1'}'; }, 50);\n`;
+            break;
+          case 'slide':
+            html += `        element${element.id.replace(/-/g, '_')}_${index}.style.transition = 'transform ${animation.duration}ms ${animation.easing || 'ease'} ${animation.delay || 0}ms';\n`;
+            html += `        element${element.id.replace(/-/g, '_')}_${index}.style.transform = 'translateY(${animation.direction === 'in' ? '50px' : '0'})';\n`;
+            html += `        setTimeout(() => { element${element.id.replace(/-/g, '_')}_${index}.style.transform = 'translateY(${animation.direction === 'in' ? '0' : '50px'})'; }, 50);\n`;
+            break;
+          // Add other animation types
+        }
+        
+        html += `      }\n`;
+      });
+    });
+    html += '    });\n';
+  }
+  
+  // Add event handlers for actions
+  const elementsWithActions = elements.filter(el => el.actions && el.actions.length > 0);
+  if (elementsWithActions.length > 0) {
+    html += '    document.addEventListener(\'DOMContentLoaded\', function() {\n';
+    elementsWithActions.forEach(element => {
+      element.actions?.forEach((action, index) => {
+        html += `      // Action for ${element.id} - ${action.type} on ${action.eventType}\n`;
+        html += `      const actionElement${element.id.replace(/-/g, '_')}_${index} = document.getElementById('${element.id}');\n`;
+        html += `      if (actionElement${element.id.replace(/-/g, '_')}_${index}) {\n`;
+        
+        // Generate event handler based on action type
+        const eventName = action.eventType === 'custom' ? action.customEvent || 'click' : action.eventType;
+        html += `        actionElement${element.id.replace(/-/g, '_')}_${index}.addEventListener('${eventName}', function(event) {\n`;
+        
+        switch (action.type) {
+          case 'link':
+            if (action.url) {
+              html += `          window.location.href = '${action.url}';\n`;
+            }
+            break;
+          case 'scroll':
+            if (action.target) {
+              html += `          document.getElementById('${action.target}')?.scrollIntoView({ behavior: 'smooth' });\n`;
+            }
+            break;
+          case 'toggle':
+            if (action.target) {
+              html += `          const targetEl = document.getElementById('${action.target}');\n`;
+              html += `          if (targetEl) targetEl.style.display = targetEl.style.display === 'none' ? 'block' : 'none';\n`;
+            }
+            break;
+          case 'custom':
+            if (action.script) {
+              html += `          ${action.script}\n`;
+            }
+            break;
+          // Add other action types
+        }
+        
+        html += `        });\n`;
+        html += `      }\n`;
+      });
+    });
+    html += '    });\n';
+  }
+  
+  // Add custom JS if provided
+  elements.forEach(element => {
+    if (element.customCode?.js) {
+      html += `    // Custom JS for ${element.id}\n`;
+      html += `    ${element.customCode.js}\n`;
+    }
+  });
+  
+  html += '  </script>\n';
+  html += '</body>\n</html>';
+  
+  return html;
+};
+
 export const useEditorStore = create<EditorState>()(
   persist(
     (set, get) => ({
+      // Implementation of all the missing functions and state defined in EditorState interface
       // Initial state
       elements: [],
       selectedElementId: null,
+      multipleSelection: [],
       copiedElement: null,
+      copiedElements: [],
       history: [[]],
       historyIndex: 0,
+      recentColors: ['#1e90ff', '#ff6347', '#32cd32', '#ffd700', '#9932cc'],
+      recentFonts: ['Arial', 'Roboto', 'Open Sans', 'Montserrat', 'Poppins'],
+      clipboard: {
+        elements: [],
+        type: null
+      },
+      
+      // Project
       currentProject: null,
       currentPageId: null,
+      allPages: [],
+      recentProjects: [],
+      
+      // Canvas state
       canvasWidth: 1200,
       canvasHeight: 800,
+      zoom: 100,
+      viewMode: 'desktop',
+      editorMode: 'design',
+      theme: 'light',
+      gridSize: 'medium',
+      showGuides: true,
+      showGrid: true,
+      snapToGrid: true,
+      snapToElements: true,
+      rulers: true,
+      fullscreenPreview: false,
       
-      // Actions
+      // UI State
+      activePanel: 'elements',
+      codeEditorOpen: true,
+      codeEditorHeight: 250,
+      codeEditorLanguage: 'html',
+      codeEditorContent: '',
+      propertyPanelWidth: 300,
+      elementLibraryWidth: 240,
+      unsavedChanges: false,
+      
+      // Core Actions
       addElement: (element) => {
         const newElement: Element = {
-          id: element.id || `element-${Date.now()}`,
+          id: element.id || generateId('element'),
           type: element.type,
-          name: element.name,
+          name: element.name || `Novo ${element.type}`,
           x: element.x,
           y: element.y,
           width: element.width,
@@ -109,11 +527,32 @@ export const useEditorStore = create<EditorState>()(
           parent: element.parent,
           visible: element.visible !== false,
           zIndex: get().elements.length + 1,
+          locked: element.locked || false,
+          animations: element.animations || [],
+          actions: element.actions || [],
+          transform: element.transform || { rotate: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 },
+          responsive: element.responsive || { mobile: {}, tablet: {} },
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         };
+        
+        // Snap to grid if enabled
+        if (get().snapToGrid && get().gridSize !== 'none') {
+          const gridSizeMap = { small: 4, medium: 8, large: 16 };
+          const size = gridSizeMap[get().gridSize] || 8;
+          newElement.x = snapToGrid(newElement.x, size);
+          newElement.y = snapToGrid(newElement.y, size);
+          newElement.width = snapToGrid(newElement.width, size);
+          newElement.height = snapToGrid(newElement.height, size);
+        }
         
         set((state) => {
           const newElements = [...state.elements, newElement];
-          return { elements: newElements, selectedElementId: newElement.id };
+          return { 
+            elements: newElements, 
+            selectedElementId: newElement.id,
+            unsavedChanges: true
+          };
         });
         
         // Create a new snapshot for history
