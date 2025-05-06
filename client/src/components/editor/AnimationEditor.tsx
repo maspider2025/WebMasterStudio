@@ -388,7 +388,7 @@ const AnimationEditor: React.FC<AnimationEditorProps> = ({
                     <Input
                       value={animation.repeat}
                       onChange={(e) => {
-                        const value = e.target.value === 'Infinity' ? 'Infinity' : parseFloat(e.target.value);
+                        const value = e.target.value === 'Infinity' ? e.target.value : parseFloat(e.target.value);
                         onUpdateAnimation(index, { ...animation, repeat: value });
                       }}
                       className="w-full h-7 text-xs bg-background"
@@ -509,7 +509,7 @@ const AnimationEditor: React.FC<AnimationEditorProps> = ({
           <Input
             value={newAnimation.repeat}
             onChange={(e) => {
-              const value = e.target.value === 'Infinity' ? 'Infinity' : parseInt(e.target.value);
+              const value = e.target.value === 'Infinity' ? e.target.value : parseInt(e.target.value);
               setNewAnimation({ ...newAnimation, repeat: value });
             }}
             className="bg-background"

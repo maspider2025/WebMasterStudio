@@ -6,18 +6,94 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import AIAssistant from "./AIAssistant";
+import AdvancedCssEditor from "./AdvancedCssEditor";
+import CssPresetLibrary from "./CssPresetLibrary";
+import AnimationEditor from "./AnimationEditor";
+import HtmlEditor from "./HtmlEditor";
 
 const PropertyPanel = () => {
-  const { selectedElementId, elements, updateElementStyles, updateElementContent } = useEditorStore();
+  const { 
+    selectedElementId, 
+    elements, 
+    updateElementStyles, 
+    updateElementContent,
+    addAnimation,
+    removeAnimation,
+    updateAnimation 
+  } = useEditorStore();
+  
   const selectedElement = elements.find(el => el.id === selectedElementId);
   
-  const [activeTab, setActiveTab] = useState<"properties" | "animations" | "data">("properties");
+  const [activeTab, setActiveTab] = useState<"properties" | "animations" | "data" | "code">("properties");
   const [assistantInput, setAssistantInput] = useState("");
+  const [showAdvancedCssEditor, setShowAdvancedCssEditor] = useState(false);
+  const [showCssLibrary, setShowCssLibrary] = useState(false);
+  const [showHtmlEditor, setShowHtmlEditor] = useState(false);
 
   const updateStyle = (property: string, value: string) => {
     if (selectedElementId) {
       updateElementStyles(selectedElementId, { [property]: value });
+    }
+  };
+  
+  const applyMultipleStyles = (styles: Record<string, string>) => {
+    if (selectedElementId) {
+      updateElementStyles(selectedElementId, styles);
+    }
+  };
+  
+  const handleAddAnimation = (animation: any) => {
+    if (selectedElementId) {
+      addAnimation(selectedElementId, animation);
+    }
+  };
+  
+  const handleUpdateAnimation = (index: number, animation: any) => {
+    if (selectedElementId) {
+      updateAnimation(selectedElementId, index, animation);
+    }
+  };
+  
+  const handleRemoveAnimation = (index: number) => {
+    if (selectedElementId) {
+      removeAnimation(selectedElementId, index);
+    }
+  };
+  
+  const handleUpdateHtml = (html: string) => {
+    if (selectedElementId) {
+      updateElementContent(selectedElementId, { 
+        content: html,
+        customCode: {
+          ...(selectedElement?.customCode || {}),
+          html
+        }
+      });
+    }
+  };
+  
+  const handleUpdateCss = (css: string) => {
+    if (selectedElementId) {
+      updateElementContent(selectedElementId, { 
+        customCode: {
+          ...(selectedElement?.customCode || {}),
+          css
+        }
+      });
+    }
+  };
+  
+  const handleUpdateJs = (js: string) => {
+    if (selectedElementId) {
+      updateElementContent(selectedElementId, { 
+        customCode: {
+          ...(selectedElement?.customCode || {}),
+          js
+        }
+      });
     }
   };
 
