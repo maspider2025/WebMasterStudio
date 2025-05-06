@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertUserSchema, insertProjectSchema, insertPageSchema, insertElementSchema, insertProductSchema, insertProductCategorySchema, insertProductVariantSchema, insertCartSchema, insertCartItemSchema, insertReviewSchema, insertWishlistSchema, insertWishlistItemSchema, insertDiscountSchema, insertProductTagSchema, insertProductTagRelationSchema, insertShippingMethodSchema, insertInventorySchema, insertInventoryHistorySchema } from "@shared/schema";
+import { insertUserSchema, insertProjectSchema, insertPageSchema, insertElementSchema, insertProductSchema, insertProductCategorySchema, insertProductVariantSchema, insertCartSchema, insertCartItemSchema, insertReviewSchema, insertWishlistSchema, insertWishlistItemSchema, insertDiscountSchema, insertProductTagSchema, insertProductTagRelationSchema, insertShippingMethodSchema, insertInventorySchema, insertInventoryHistorySchema, projectDatabases, projectApis, projectDatabasesInsertSchema, projectApisInsertSchema } from "@shared/schema";
 import { isAuthenticated } from "./auth";
 import { eq, and, desc, like, or, sql } from "drizzle-orm";
 import { db } from "@db";
@@ -82,11 +82,26 @@ function formatSQLValue(value: any, type: string): string {
 // Rota para criação de tabelas de banco de dados
 async function handleCreateDatabaseTable(req: Request, res: Response) {
   try {
-    const { name, description, generateApi, columns } = req.body;
+    const { name, description, generateApi, columns, projectId } = req.body;
     
     if (!name || !columns || !Array.isArray(columns) || columns.length === 0) {
       return res.status(400).json({
         message: 'Nome da tabela e colunas são obrigatórios'
+      });
+    }
+    
+    // Verificar se o ID do projeto foi fornecido
+    if (!projectId) {
+      return res.status(400).json({
+        message: 'ID do projeto é obrigatório para criar uma tabela'
+      });
+    }
+    
+    // Verificar se o projeto existe
+    const project = await storage.getProjectById(parseInt(projectId));
+    if (!project) {
+      return res.status(404).json({
+        message: 'Projeto não encontrado'
       });
     }
     
@@ -141,23 +156,66 @@ async function handleCreateDatabaseTable(req: Request, res: Response) {
     createTableSQL += columnDefs.join(',\n');
     createTableSQL += '\n);';
     
+    // Criar nome de tabela prefixado com o ID do projeto para garantir isolamento
+    const projectTableName = `p${projectId}_${name}`;
+    
+    // Atualizar o SQL com o nome da tabela prefixado
+    createTableSQL = createTableSQL.replace(`CREATE TABLE ${name}`, `CREATE TABLE ${projectTableName}`);
+    
     // Execute SQL para criar a tabela
     await pool.query(createTableSQL);
     
-    // Registrar no sistema de metadados
-    // TODO: Implementar registro em tabela de metadados para gerenciamento visual
+    // Registrar no sistema de metadados do projeto
+    const tableMetadata = {
+      projectId: parseInt(projectId),
+      tableName: projectTableName,
+      displayName: name,
+      description: description || "",
+      apiEnabled: !!generateApi,
+      isBuiltIn: false,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    
+    // Inserir na tabela de metadados
+    const [savedTable] = await db.insert(schema.projectDatabases).values(tableMetadata).returning();
     
     // Gerar API dinamicamente se solicitado
     if (generateApi) {
-      // TODO: Implementar geração dinâmica de API
-      // Isso será feito usando o api-generator.ts
+      try {
+        // Registrar endpoints na tabela de metadados de API
+        const apiMethods = ["GET", "POST", "PUT", "DELETE"];
+        
+        // Criar uma entrada para cada método
+        for (const method of apiMethods) {
+          const apiMetadata = {
+            projectId: parseInt(projectId),
+            databaseId: savedTable.id,
+            apiPath: `/api/projects/${projectId}/${name.toLowerCase()}`,
+            method: method,
+            description: `API ${method} para tabela ${name}`,
+            isActive: true,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          };
+          
+          await db.insert(schema.projectApis).values(apiMetadata).returning();
+        }
+        
+        console.log(`API para tabela ${projectTableName} registrada com sucesso`);
+      } catch (apiError) {
+        console.error(`Erro ao registrar API para tabela ${projectTableName}:`, apiError);
+        // Não interromper com erro, apenas registrar o problema
+      }
     }
     
     return res.status(201).json({
       message: `Tabela ${name} criada com sucesso`,
-      sql: createTableSQL,
-      name,
-      generateApi
+      id: savedTable.id,
+      name: savedTable.displayName,
+      tableName: savedTable.tableName,
+      projectId: savedTable.projectId,
+      apiEnabled: savedTable.apiEnabled
     });
     
   } catch (error) {
