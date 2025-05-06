@@ -702,8 +702,8 @@ export const FormComponent = ({ element, isEditMode, onChange }: FormFieldProps)
     if (!isEditMode) return;
     
     // Gerar um ID único para o novo campo
-    const uniqueId = getUniqueId();
     const timestamp = Date.now();
+    const uniqueId = `field_${timestamp}_${Math.random().toString(36).substring(2, 9)}`;
     
     // Configurações básicas para qualquer tipo de campo
     let newField: Partial<Element> = {
@@ -758,7 +758,7 @@ export const FormComponent = ({ element, isEditMode, onChange }: FormFieldProps)
             name: `selecao_${timestamp}`,
             label: 'Nova Seleção',
             options: JSON.stringify([
-              { value: '', label: 'Selecione uma opção' },
+              { value: 'selecione', label: 'Selecione uma opção' },
               { value: 'opcao1', label: 'Opção 1' },
               { value: 'opcao2', label: 'Opção 2' }
             ]),
@@ -820,8 +820,12 @@ export const FormComponent = ({ element, isEditMode, onChange }: FormFieldProps)
       children: updatedChildren
     });
     
-    // Atualiza a ordem dos campos
-    setFieldOrder(updatedChildren);
+    // Salva explicitamente os IDs na ordem em que os campos devem aparecer (para arrastar/soltar)
+    // Podemos usar o atributo de fieldOrder para manter a ordem independente da propriedade children
+    const fieldOrder = element.fieldOrder || [];
+    updateElement(element.id, {
+      fieldOrder: [...fieldOrder, fieldId]
+    });
     
     // Retorna o ID do campo adicionado
     return fieldId;
