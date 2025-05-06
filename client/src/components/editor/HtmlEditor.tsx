@@ -35,18 +35,34 @@ const HtmlEditor: React.FC<HtmlEditorProps> = ({
         <!DOCTYPE html>
         <html>
         <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <style>
+            /* Base styles to ensure preview looks good */
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+                Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+              line-height: 1.5;
+              color: #333;
+              margin: 0;
+              padding: 1rem;
+              box-sizing: border-box;
+            }
+            
+            /* User styles */
             ${cssContent}
           </style>
         </head>
         <body>
           ${htmlContent}
           <script>
-            try {
-              ${jsContent}
-            } catch (e) {
-              console.error('Script error:', e);
-            }
+            document.addEventListener('DOMContentLoaded', function() {
+              try {
+                ${jsContent}
+              } catch (e) {
+                console.error('Script error:', e);
+              }
+            });
           </script>
         </body>
         </html>

@@ -49,6 +49,60 @@ const ResizableElement = ({ element, isSelected, onClick }: ResizableElementProp
   
   // Render content based on element type
   const renderContent = () => {
+    // Se o elemento tem HTML, CSS ou JS personalizado, aplicamos através de um iframe
+    if (element.htmlContent || element.cssContent || element.jsContent) {
+      const combinedHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <style>
+            /* Estilos base */
+            body {
+              margin: 0;
+              padding: 0;
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              line-height: 1.5;
+              color: #333;
+            }
+            /* Estilos personalizados do elemento */
+            ${element.cssContent || ''}
+          </style>
+        </head>
+        <body>
+          ${element.htmlContent || element.content || '<div>Container</div>'}
+          <script>
+            document.addEventListener('DOMContentLoaded', function() {
+              try {
+                ${element.jsContent || ''}
+              } catch (e) {
+                console.error('Script error:', e);
+              }
+            });
+          </script>
+        </body>
+        </html>
+      `;
+      
+      return (
+        <iframe 
+          srcDoc={combinedHtml}
+          title="Element Content"
+          className="w-full h-full border-none"
+          sandbox="allow-scripts"
+          onLoad={(e) => {
+            const iframe = e.target as HTMLIFrameElement;
+            if (iframe.contentWindow) {
+              // Opcionalmente, podemos injetar variáveis globais no iframe
+              // iframe.contentWindow.componentData = { element: element };
+            }
+          }}
+        />
+      );
+    }
+    
+    // Caso contrário, utilizamos a renderização padrão
     switch (element.type) {
       case ElementTypes.text:
         return element.content || 'Text content';
@@ -58,6 +112,42 @@ const ResizableElement = ({ element, isSelected, onClick }: ResizableElementProp
         return <button className="px-4 py-2 bg-primary text-primary-foreground rounded">{element.content || 'Button'}</button>;
       case ElementTypes.image:
         return <img src={element.src || 'https://via.placeholder.com/150'} alt={element.alt || 'Image'} className="w-full h-full object-cover" />;
+      case ElementTypes.form:
+        return (
+          <div className="w-full h-full flex flex-col gap-3 p-4 overflow-auto">
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium">Nome</label>
+              <input type="text" className="border rounded p-2" placeholder="Seu nome" />
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium">Email</label>
+              <input type="email" className="border rounded p-2" placeholder="seu@email.com" />
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium">Mensagem</label>
+              <textarea className="border rounded p-2 min-h-[80px]" placeholder="Digite sua mensagem..."></textarea>
+            </div>
+            <button className="mt-2 bg-primary text-primary-foreground py-2 px-4 rounded">Enviar</button>
+          </div>
+        );
+      case ElementTypes.productCard:
+        return (
+          <div className="h-full w-full flex flex-col overflow-hidden">
+            <div className="h-1/2 bg-gray-200 relative">
+              <div className="absolute top-0 right-0 bg-red-500 text-white text-xs font-bold px-2 py-1">20% OFF</div>
+              <img src="https://via.placeholder.com/300x150" alt="Product" className="w-full h-full object-cover" />
+            </div>
+            <div className="p-3 flex flex-col flex-1">
+              <h3 className="font-medium text-sm">Produto Exemplo</h3>
+              <div className="text-xs text-gray-600 mb-1">Categoria</div>
+              <div className="flex items-center gap-2 mt-auto">
+                <span className="font-bold">R$ 59,90</span>
+                <span className="text-xs line-through text-gray-400">R$ 79,90</span>
+              </div>
+              <button className="mt-2 w-full bg-primary text-primary-foreground py-1 text-sm rounded">Adicionar ao Carrinho</button>
+            </div>
+          </div>
+        );
       default:
         return element.content || <div className="w-full h-full flex items-center justify-center text-muted-foreground">Container</div>;
     }
