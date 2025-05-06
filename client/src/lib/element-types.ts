@@ -20,6 +20,7 @@ export enum ElementTypes {
   checkout = 'checkout',
   productGallery = 'productGallery',
   carousel = 'carousel',
+  footer = 'footer',
 }
 
 export interface ElementType {
@@ -299,6 +300,18 @@ export const elementTypes: Record<string, ElementType> = {
       backgroundColor: '#f3f4f6',
       borderRadius: '8px',
       overflow: 'hidden'
+    }
+  },
+  footer: {
+    type: ElementTypes.footer,
+    name: 'Rodapé',
+    icon: '📃',
+    defaultWidth: 1200,
+    defaultHeight: 400,
+    defaultStyles: {
+      padding: '4rem 2rem 2rem',
+      backgroundColor: '#f9fafb',
+      borderTop: '1px solid #e5e7eb'
     }
   }
 };

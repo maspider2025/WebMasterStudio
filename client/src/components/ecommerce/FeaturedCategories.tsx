@@ -1,125 +1,99 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'wouter';
-import { useQuery } from '@tanstack/react-query';
 
 interface Category {
   id: number;
   name: string;
   slug: string;
-  description: string | null;
-  image: string | null;
-  parentId: number | null;
+  description?: string;
+  imageUrl?: string;
 }
 
 interface FeaturedCategoriesProps {
-  title: string;
+  title?: string;
   subtitle?: string;
   projectId: number;
-  limit?: number;
   layout?: 'grid' | 'carousel';
+  limit?: number;
   editable?: boolean;
   onEdit?: () => void;
 }
 
 export function FeaturedCategories({
-  title,
+  title = 'Categorias em Destaque',
   subtitle,
   projectId,
-  limit = 6,
   layout = 'grid',
+  limit = 4,
   editable = false,
   onEdit,
 }: FeaturedCategoriesProps) {
-  // Consulta para obter categorias
-  const { data: categories, isLoading, error } = useQuery<Category[]>({
-    queryKey: [`/api/projects/${projectId}/categories`],
-    queryFn: async () => {
-      const response = await fetch(`/api/projects/${projectId}/categories`);
-      if (!response.ok) {
-        throw new Error('Falha ao carregar categorias');
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [currentSlide, setCurrentSlide] = useState(0);
+  
+  // Obter categorias do servidor
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(`/api/projects/${projectId}/categories?limit=${limit}&featured=true`);
+        
+        if (response.ok) {
+          const data = await response.json();
+          setCategories(data);
+        }
+      } catch (error) {
+        console.error('Erro ao carregar categorias:', error);
+      } finally {
+        setLoading(false);
       }
-      const data = await response.json();
-      return data.filter((category: Category) => !category.parentId).slice(0, limit); // Apenas categorias principais, limitadas
-    },
-  });
-
-  // Analisar imagem de categoria
-  const parseImage = (image: string | null): string => {
-    if (!image) return '/placeholder-category.jpg'; // Imagem de espaço reservado
+    };
     
-    try {
-      const parsed = JSON.parse(image);
-      return typeof parsed === 'object' && parsed.url ? parsed.url : (
-        Array.isArray(parsed) && parsed.length > 0 ? (parsed[0].url || parsed[0]) : image
-      );
-    } catch (e) {
-      return image; // Retornar o valor original se não for JSON válido
-    }
+    fetchCategories();
+  }, [projectId, limit]);
+  
+  // Navegar para o slide anterior
+  const prevSlide = () => {
+    if (categories.length <= 1) return;
+    setCurrentSlide((prev) => (prev === 0 ? categories.length - 1 : prev - 1));
   };
-
-  // Renderizar esqueletos de carregamento
-  const renderSkeletons = () => {
-    return Array(6).fill(0).map((_, index) => (
-      <div key={`skeleton-${index}`} className="rounded-lg overflow-hidden">
-        <div className="bg-gray-100 animate-pulse h-40"></div>
-        <div className="p-4">
-          <div className="bg-gray-100 animate-pulse h-4 w-3/4 mb-2"></div>
-          <div className="bg-gray-100 animate-pulse h-3 w-1/2"></div>
-        </div>
-      </div>
-    ));
+  
+  // Navegar para o próximo slide
+  const nextSlide = () => {
+    if (categories.length <= 1) return;
+    setCurrentSlide((prev) => (prev + 1) % categories.length);
   };
-
-  // Renderizar categorias
-  const renderCategories = () => {
-    if (!categories || categories.length === 0) {
-      return (
-        <div className="col-span-full text-center py-8">
-          <p className="text-gray-500">Nenhuma categoria encontrada.</p>
-        </div>
-      );
+  
+  // Imagens de fallback para algumas categorias
+  const placeholderImages: Record<string, string> = {
+    roupas: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?q=80&w=2070',
+    calcados: 'https://images.unsplash.com/photo-1549298916-b41d501d3772?q=80&w=2012',
+    acessorios: 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?q=80&w=1935',
+    esportes: 'https://images.unsplash.com/photo-1535131749006-b7f58c99034b?q=80&w=2070',
+    eletronicos: 'https://images.unsplash.com/photo-1546054454-aa26e2b734c7?q=80&w=2080',
+    default: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?q=80&w=2070',
+  };
+  
+  // Obter imagem para categoria (usar a categoria ou fallback)
+  const getCategoryImage = (category: Category): string => {
+    if (category.imageUrl && category.imageUrl.trim() !== '') {
+      return category.imageUrl;
     }
-
-    return categories.map((category) => (
-      <Link
-        key={category.id}
-        href={`/produtos?categoria=${category.slug}`}
-        className="group block rounded-lg overflow-hidden border bg-card hover:shadow-md transition-shadow"
-      >
-        <div className="relative h-40 overflow-hidden bg-gray-100">
-          <img
-            src={parseImage(category.image)}
-            alt={category.name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          />
-        </div>
-        <div className="p-4">
-          <h3 className="font-medium text-foreground group-hover:text-primary transition-colors">
-            {category.name}
-          </h3>
-          {category.description && (
-            <p className="text-sm text-foreground/70 mt-1 line-clamp-2">
-              {category.description}
-            </p>
-          )}
-        </div>
-      </Link>
-    ));
+    
+    const slug = category.slug.toLowerCase();
+    return placeholderImages[slug] || placeholderImages.default;
   };
 
   return (
-    <div className="w-full py-8">
+    <div className="w-full py-16 bg-white dark:bg-background">
       <div className="container mx-auto px-4">
-        <div className="flex flex-wrap items-center justify-between mb-6">
-          <div>
-            <h2 className="text-2xl font-bold text-foreground">{title}</h2>
-            {subtitle && <p className="text-foreground/70 mt-1">{subtitle}</p>}
-          </div>
+        <div className="text-center mb-10 relative">
           {editable && (
             <button
               onClick={onEdit}
-              className="ml-2 p-2 text-primary hover:bg-primary/10 rounded-full transition-colors"
-              title="Editar categorias em destaque"
+              className="absolute top-0 right-0 p-2 text-primary hover:bg-primary/10 rounded-full transition-colors"
+              title="Editar categorias"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 20h9"></path>
@@ -127,35 +101,119 @@ export function FeaturedCategories({
               </svg>
             </button>
           )}
+          
+          {title && <h2 className="text-3xl font-bold text-foreground mb-2">{title}</h2>}
+          {subtitle && <p className="text-foreground/70">{subtitle}</p>}
         </div>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {isLoading ? renderSkeletons() : renderCategories()}
-        </div>
+        {/* Estado de carregamento */}
+        {loading && (
+          <div className="flex justify-center items-center h-40">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+          </div>
+        )}
         
-        <div className="text-center mt-8">
-          <Link
-            href="/produtos"
-            className="inline-flex items-center text-primary hover:text-primary/80 transition-colors"
-          >
-            Ver todos os produtos
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="ml-2"
-            >
-              <path d="M5 12h14"></path>
-              <path d="m12 5 7 7-7 7"></path>
-            </svg>
-          </Link>
-        </div>
+        {/* Layout em grid */}
+        {!loading && layout === 'grid' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {categories.map((category) => (
+              <Link key={category.id} href={`/produtos?categoria=${category.slug}`}>
+                <div className="group relative rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer h-72">
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent z-10"></div>
+                  <img 
+                    src={getCategoryImage(category)} 
+                    alt={category.name} 
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                  <div className="absolute bottom-0 left-0 w-full p-6 z-20">
+                    <h3 className="text-xl font-bold text-white mb-1">{category.name}</h3>
+                    {category.description && (
+                      <p className="text-white/80 text-sm">{category.description}</p>
+                    )}
+                    <div className="mt-3 flex items-center text-white">
+                      <span className="text-sm font-medium">Ver produtos</span>
+                      <svg className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+        
+        {/* Layout em carrossel */}
+        {!loading && layout === 'carousel' && (
+          <div className="relative">
+            <div className="overflow-hidden">
+              <div 
+                className="flex transition-transform duration-500 ease-in-out"
+                style={{ transform: `translateX(-${currentSlide * 100}%)` }}
+              >
+                {categories.map((category) => (
+                  <div key={category.id} className="w-full flex-shrink-0 px-2">
+                    <Link href={`/produtos?categoria=${category.slug}`}>
+                      <div className="group relative rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer h-80">
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent z-10"></div>
+                        <img 
+                          src={getCategoryImage(category)} 
+                          alt={category.name} 
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                        <div className="absolute bottom-0 left-0 w-full p-6 z-20">
+                          <h3 className="text-xl font-bold text-white mb-2">{category.name}</h3>
+                          {category.description && (
+                            <p className="text-white/80 text-sm">{category.description}</p>
+                          )}
+                          <div className="mt-4 flex items-center text-white">
+                            <span className="text-sm font-medium">Ver produtos</span>
+                            <svg className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                            </svg>
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            {categories.length > 1 && (
+              <div className="flex justify-center mt-8 space-x-2">
+                <button
+                  onClick={prevSlide}
+                  className="p-2 rounded-full bg-secondary hover:bg-secondary/80 transition-colors"
+                  aria-label="Categoria anterior"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M15 18l-6-6 6-6"></path>
+                  </svg>
+                </button>
+                <div className="flex space-x-2">
+                  {categories.map((_, index) => (
+                    <button
+                      key={index}
+                      onClick={() => setCurrentSlide(index)}
+                      className={`w-3 h-3 rounded-full ${currentSlide === index ? 'bg-primary' : 'bg-gray-300'}`}
+                      aria-label={`Ver categoria ${index + 1}`}
+                    />
+                  ))}
+                </div>
+                <button
+                  onClick={nextSlide}
+                  className="p-2 rounded-full bg-secondary hover:bg-secondary/80 transition-colors"
+                  aria-label="Próxima categoria"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 18l6-6-6-6"></path>
+                  </svg>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
