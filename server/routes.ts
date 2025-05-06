@@ -5517,7 +5517,7 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
     }
   });
   
-  // Endpoint para inserir registros em uma tabela
+  // Endpoint para inserir registros em uma tabela (usando ProjectTableManager)
   app.post(`${apiPrefix}/p/:projectId/data/:tableName`, express.json(), async (req, res) => {
     try {
       const projectId = parseInt(req.params.projectId, 10);
@@ -5530,115 +5530,75 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
           message: "ID do projeto e nome da tabela são obrigatórios" 
         });
       }
+
+      // Importar dinamicamente os serviços
+      const { idGenerator } = await import('./services/id-generator');
+      const { projectTableManager } = await import('./services/project-table-manager');
       
-      // Nome completo da tabela no banco
-      const fullTableName = `p${projectId}_${tableName}`;
+      // Estabelecer regras de negócio e enriquecimento de dados
+      const enrichedData = { ...data };
       
-      // Verificar se a tabela existe
-      const tableCheck = await db.execute(sql`
-        SELECT EXISTS (
-          SELECT 1 FROM information_schema.tables 
-          WHERE table_schema = 'public' AND table_name = ${fullTableName}
-        ) as exists
-      `);
-      
-      if (!tableCheck.rows[0].exists) {
-        return res.status(404).json({ 
-          success: false,
-          message: `Tabela ${tableName} não existe para o projeto ${projectId}` 
-        });
+      // 1. Gerar slugs para produtos automaticamente se tiver campo nome e não tiver slug
+      if (tableName.toLowerCase().includes('produto') && data.nome && !data.slug) {
+        enrichedData.slug = idGenerator.generateSlug(data.nome);
+        console.log(`Slug gerado automaticamente para produto: ${enrichedData.slug}`);
       }
       
-      // Verificar se existem dados para inserir
-      if (!data || Object.keys(data).length === 0) {
-        return res.status(400).json({ 
-          success: false,
-          message: "Nenhum dado fornecido para inserção" 
-        });
+      // 2. Tratar datas em formato string para objetos Date
+      for (const [key, value] of Object.entries(enrichedData)) {
+        if (typeof value === 'string' && 
+            (key.includes('data') || key.includes('date') || key.endsWith('_at')) && 
+            !isNaN(Date.parse(value))) {
+          enrichedData[key] = new Date(value);
+        }
       }
       
-      // Obter estrutura da tabela para validar campos
-      const tableSchema = await db.execute(sql`
-        SELECT column_name, data_type, is_nullable 
-        FROM information_schema.columns 
-        WHERE table_name = ${fullTableName}
-        AND table_schema = 'public'
-      `);
+      // 3. Aplicar validações específicas por tipo de entidade
+      const validationSchema = {};
       
-      // Transformar em um mapa para fácil acesso
-      const columnsMap = {};
-      for (const col of tableSchema.rows) {
-        columnsMap[col.column_name] = {
-          dataType: col.data_type,
-          isNullable: col.is_nullable === 'YES'
+      // Validar produtos, por exemplo
+      if (tableName.toLowerCase().includes('produto')) {
+        validationSchema['nome'] = {
+          required: true,
+          minLength: 2,
+          maxLength: 200
         };
-      }
-      
-      // Validar os dados fornecidos contra o schema
-      const validatedData = {};
-      const errors = [];
-      
-      // Acompanhar as colunas disponíveis
-      const availableColumns = new Set(Object.keys(columnsMap));
-      
-      // Para cada campo nos dados
-      for (const [key, value] of Object.entries(data)) {
-        // Verificar se o campo existe na tabela
-        if (!availableColumns.has(key)) {
-          errors.push(`Campo '${key}' não existe na tabela ${tableName}`);
-          continue;
-        }
         
-        // Verificar valores nulos
-        if ((value === null || value === undefined) && !columnsMap[key].isNullable) {
-          errors.push(`Campo '${key}' não pode ser nulo`);
-          continue;
-        }
-        
-        // Se não é nulo, adicionar aos dados validados
-        if (value !== undefined) {
-          validatedData[key] = value;
+        // Se tiver preço, validar range
+        if ('preco' in data) {
+          validationSchema['preco'] = {
+            type: 'number',
+            min: 0
+          };
         }
       }
       
-      // Se houver erros, retornar
-      if (errors.length > 0) {
-        return res.status(400).json({ 
+      // Usar o serviço para inserir o registro com enriquecimento e validação
+      const result = await projectTableManager.insertRecord(
+        projectId, 
+        tableName, 
+        enrichedData, 
+        Object.keys(validationSchema).length > 0 ? validationSchema : undefined
+      );
+      
+      // Tratar o resultado conforme retornado pelo serviço
+      if (result.success) {
+        return res.status(201).json({
+          success: true,
+          projectId,
+          tableName,
+          message: 'Registro inserido com sucesso',
+          data: result.data
+        });
+      } else {
+        // Status 400 para erros de validação, 404 para tabela não encontrada
+        const statusCode = result.error?.includes('não existe') ? 404 : 400;
+        return res.status(statusCode).json({
           success: false,
-          message: "Erros de validação nos dados fornecidos",
-          errors
+          message: result.error,
+          details: result.data // Incluir detalhes como erros de validação se existirem
         });
       }
-      
-      // Construir a query de inserção
-      const columns = Object.keys(validatedData);
-      const values = Object.values(validatedData);
-      
-      // Construir a query manualmente com valores
-      const columnsSql = columns.map(col => sql.identifier(col));
-      const valuesSql = values.map(val => sql`${val}`);
-      
-      // Construir a query diretamente com valores
-      const insertQuery = sql`
-        INSERT INTO ${sql.identifier(fullTableName)} (
-          ${sql.join(columnsSql, sql`, `)}
-        ) VALUES (
-          ${sql.join(valuesSql, sql`, `)}
-        )
-        RETURNING *
-      `;
-      
-      // Executar a query com os parâmetros
-      const result = await db.execute(insertQuery);
-      
-      res.status(201).json({
-        success: true,
-        projectId,
-        tableName,
-        message: 'Registro inserido com sucesso',
-        data: result.rows[0]
-      });
-      
     } catch (error) {
       console.error('Erro ao inserir registro na tabela:', error);
       res.status(500).json({ 
