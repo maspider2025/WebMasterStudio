@@ -7,6 +7,7 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import Editor from "@/pages/editor";
 import Products from "@/pages/products";
+import ProductDetails from "@/pages/product-details";
 import Cart from "@/pages/cart";
 import Checkout from "@/pages/checkout";
 import Subscribe from "@/pages/subscribe";
@@ -16,10 +17,11 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/editor" component={Editor} />
-      <Route path="/products" component={Products} />
-      <Route path="/cart" component={Cart} />
+      <Route path="/produtos" component={Products} />
+      <Route path="/produtos/:slug" component={ProductDetails} />
+      <Route path="/carrinho" component={Cart} />
       <Route path="/checkout" component={Checkout} />
-      <Route path="/subscribe" component={Subscribe} />
+      <Route path="/assinatura" component={Subscribe} />
       <Route component={NotFound} />
     </Switch>
   );

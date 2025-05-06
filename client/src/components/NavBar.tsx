@@ -56,23 +56,23 @@ export function NavBar() {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-1">
               <Link href="/" className={`px-4 py-2 rounded-md text-sm ${isActive('/')}`}>
-                Home
+                Início
               </Link>
               <Link href="/editor" className={`px-4 py-2 rounded-md text-sm ${isActive('/editor')}`}>
                 Editor
               </Link>
-              <Link href="/products" className={`px-4 py-2 rounded-md text-sm ${isActive('/products')}`}>
-                Products
+              <Link href="/produtos" className={`px-4 py-2 rounded-md text-sm ${isActive('/produtos')}`}>
+                Produtos
               </Link>
               <Link href="/checkout" className={`px-4 py-2 rounded-md text-sm ${isActive('/checkout')}`}>
-                Checkout
+                Finalizar Compra
               </Link>
-              <Link href="/subscribe" className={`px-4 py-2 rounded-md text-sm ${isActive('/subscribe')}`}>
-                Subscribe
+              <Link href="/assinatura" className={`px-4 py-2 rounded-md text-sm ${isActive('/assinatura')}`}>
+                Assinatura
               </Link>
             </div>
             <div className="flex items-center space-x-2">
-              <Link href="/cart" className="px-3 py-2 rounded-md text-sm hover:bg-primary/5 relative">
+              <Link href="/carrinho" className="px-3 py-2 rounded-md text-sm hover:bg-primary/5 relative">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   width="24"
@@ -83,7 +83,7 @@ export function NavBar() {
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className={`h-5 w-5 ${isActive('/cart') ? 'text-primary' : 'text-foreground/80'}`}
+                  className={`h-5 w-5 ${isActive('/carrinho') ? 'text-primary' : 'text-foreground/80'}`}
                 >
                   <circle cx="8" cy="21" r="1" />
                   <circle cx="19" cy="21" r="1" />
