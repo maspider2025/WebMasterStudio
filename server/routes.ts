@@ -4359,6 +4359,20 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
     handleCreateDatabaseTable(req, res);
   });
   
+  // Rota para obter schema de uma tabela específica por projeto
+  app.get(`${apiPrefix}/projects/:projectId/database/tables/:tableName/schema`, (req, res) => {
+    req.query.projectId = req.params.projectId;
+    req.params.tableName = req.params.tableName;
+    return handleGetTableSchema(req, res);
+  });
+  
+  // Rota para buscar dados de uma tabela específica por projeto
+  app.get(`${apiPrefix}/projects/:projectId/database/tables/:tableName/data`, (req, res) => {
+    req.query.projectId = req.params.projectId;
+    req.params.tableName = req.params.tableName;
+    return handleGetTableData(req, res);
+  });
+  
   // ============= APIS DINÂMICAS E GERENCIAMENTO =============
   
   // Endpoint para listar as APIs registradas para um projeto
@@ -4516,8 +4530,8 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
     }
   });
   
-  // Endpoint para obter schema de uma tabela específica
-  app.get(`${apiPrefix}/database/tables/:tableName/schema`, async (req, res) => {
+  // Handlers para tabelas de banco de dados
+  async function handleGetTableSchema(req: Request, res: Response) {
     try {
       const { tableName } = req.params;
       const projectId = req.query.projectId ? parseInt(req.query.projectId as string, 10) : null;
@@ -4579,10 +4593,14 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
     } catch (error) {
       handleError(res, error, "Erro ao buscar schema da tabela");
     }
-  });
+  }
   
-  // Endpoint para buscar dados de uma tabela (com paginação e filtros)
-  app.get(`${apiPrefix}/database/tables/:tableName/data`, async (req, res) => {
+  // Registrar as rotas antigas para compatibilidade retroativa
+  app.get(`${apiPrefix}/database/tables/:tableName/schema`, handleGetTableSchema);
+  app.get(`${apiPrefix}/database/tables/:tableName/data`, handleGetTableData);
+  
+  // Handler para buscar dados de uma tabela
+  async function handleGetTableData(req: Request, res: Response) {
     try {
       const { tableName } = req.params;
       const projectId = req.query.projectId ? parseInt(req.query.projectId as string, 10) : null;
@@ -4704,7 +4722,7 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
     } catch (error) {
       handleError(res, error, "Erro ao buscar dados da tabela");
     }
-  });
+  }
   
   // Endpoint para criar novo registro em uma tabela
   app.post(`${apiPrefix}/database/tables/:tableName/data`, async (req, res) => {

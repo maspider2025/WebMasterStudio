@@ -139,12 +139,12 @@ export function DatabaseVisualizer({ projectId = 'default' }: DatabaseVisualizer
       
       console.log("Carregando dados da tabela", tableName, "para o projeto ID:", currentProjectId);
       
-      // Buscar schema da tabela para as informações estruturais
-      const schemaResponse = await apiRequest('GET', `/api/database/tables/${tableName}/schema?projectId=${currentProjectId}`);
+      // Buscar schema da tabela para as informações estruturais usando a rota específica por projeto
+      const schemaResponse = await apiRequest('GET', `/api/projects/${currentProjectId}/database/tables/${tableName}/schema`);
       const schemaData = await schemaResponse.json();
       
-      // Buscar os dados da tabela
-      const dataResponse = await apiRequest('GET', `/api/database/tables/${tableName}/data?projectId=${currentProjectId}`);
+      // Buscar os dados da tabela usando a rota específica por projeto
+      const dataResponse = await apiRequest('GET', `/api/projects/${currentProjectId}/database/tables/${tableName}/data`);
       const dataResult = await dataResponse.json();
       
       if (schemaResponse.ok && dataResponse.ok) {
