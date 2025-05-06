@@ -2,483 +2,410 @@ import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Plus, X, Database, Save } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Plus, Database, Save, CheckCircle2 } from 'lucide-react';
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { apiRequest } from "@/lib/queryClient";
+
+interface Column {
+  name: string;
+  type: string;
+  primary?: boolean;
+  notNull?: boolean;
+  defaultValue?: string;
+}
 
 interface NewDatabaseTableProps {
   onTableCreated?: (tableName: string) => void;
 }
 
-interface ColumnConfig {
-  name: string;
-  type: string;
-  notNull: boolean;
-  primary: boolean;
-  defaultValue?: string;
-}
-
 const COLUMN_TYPES = [
-  { value: 'text', label: 'Texto' },
-  { value: 'integer', label: 'Número Inteiro' },
-  { value: 'decimal', label: 'Número Decimal' },
-  { value: 'boolean', label: 'Booleano' },
-  { value: 'date', label: 'Data' },
-  { value: 'timestamp', label: 'Data e Hora' },
-  { value: 'json', label: 'JSON' },
-  { value: 'reference', label: 'Referência (Chave Estrangeira)' },
+  { value: 'string', label: 'Texto (String)' },
+  { value: 'text', label: 'Texto Longo (Text)' },
+  { value: 'integer', label: 'Número Inteiro (Integer)' },
+  { value: 'decimal', label: 'Decimal (Numeric)' },
+  { value: 'boolean', label: 'Booleano (Boolean)' },
+  { value: 'date', label: 'Data (Date)' },
+  { value: 'datetime', label: 'Data e Hora (Timestamp)' },
+  { value: 'json', label: 'JSON' }
 ];
 
-const NewDatabaseTable: React.FC<NewDatabaseTableProps> = ({ onTableCreated }) => {
+export default function NewDatabaseTable({ onTableCreated }: NewDatabaseTableProps) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState('basic');
-  
+  const [submitting, setSubmitting] = useState(false);
   const [tableName, setTableName] = useState('');
   const [tableDescription, setTableDescription] = useState('');
-  const [generateApi, setGenerateApi] = useState(true);
-  const [columns, setColumns] = useState<ColumnConfig[]>([
-    { name: 'id', type: 'integer', notNull: true, primary: true, defaultValue: '' },
+  const [columns, setColumns] = useState<Column[]>([
+    { name: 'id', type: 'integer', primary: true, notNull: true }
   ]);
-  const [isCreating, setIsCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [includeTimestamps, setIncludeTimestamps] = useState(true);
+  const [includeSoftDelete, setIncludeSoftDelete] = useState(false);
   
   const resetForm = () => {
     setTableName('');
     setTableDescription('');
-    setGenerateApi(true);
-    setColumns([
-      { name: 'id', type: 'integer', notNull: true, primary: true, defaultValue: '' },
-    ]);
-    setActiveTab('basic');
-    setError(null);
+    setColumns([{ name: 'id', type: 'integer', primary: true, notNull: true }]);
+    setIncludeTimestamps(true);
+    setIncludeSoftDelete(false);
   };
   
-  const handleAddColumn = () => {
-    setColumns([
-      ...columns,
-      { name: '', type: 'text', notNull: false, primary: false }
-    ]);
+  const addNewColumn = () => {
+    setColumns([...columns, { name: '', type: 'string' }]);
   };
   
-  const handleRemoveColumn = (index: number) => {
-    // Não permitir remover a coluna ID primária
-    if (index === 0 && columns[0].primary) {
+  const removeColumn = (index: number) => {
+    // Não permite remover a coluna ID
+    if (index === 0 && columns[0].name === 'id') {
       toast({
-        title: "Não é possível remover",
-        description: "A coluna ID primária não pode ser removida.",
+        title: "Operação não permitida",
+        description: "A coluna ID é necessária e não pode ser removida.",
         variant: "destructive"
       });
       return;
     }
     
-    setColumns(columns.filter((_, i) => i !== index));
+    const newColumns = [...columns];
+    newColumns.splice(index, 1);
+    setColumns(newColumns);
   };
   
-  const handleColumnChange = (index: number, field: keyof ColumnConfig, value: any) => {
-    const updatedColumns = [...columns];
-    updatedColumns[index] = { ...updatedColumns[index], [field]: value };
-    setColumns(updatedColumns);
+  const updateColumn = (index: number, field: keyof Column, value: any) => {
+    const newColumns = [...columns];
+    newColumns[index] = { ...newColumns[index], [field]: value };
+    setColumns(newColumns);
+    
+    // Se a coluna for marcada como chave primária, automaticamente marca como não nula
+    if (field === 'primary' && value === true) {
+      newColumns[index].notNull = true;
+    }
   };
   
-  const validateForm = (): boolean => {
-    // Verificar se o nome da tabela está vazio
+  const validateForm = () => {
+    // Verificar nome da tabela
     if (!tableName.trim()) {
-      setError("O nome da tabela é obrigatório");
-      setActiveTab('basic');
+      toast({
+        title: "Nome da tabela obrigatório",
+        description: "Forneça um nome para a tabela.",
+        variant: "destructive"
+      });
       return false;
     }
     
-    // Verificar se o nome da tabela contém apenas caracteres válidos
+    // Verificar formato do nome da tabela (apenas letras, números e underscores)
     if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(tableName)) {
-      setError("O nome da tabela deve começar com uma letra e conter apenas letras, números e underscores");
-      setActiveTab('basic');
+      toast({
+        title: "Nome de tabela inválido",
+        description: "O nome da tabela deve começar com uma letra e conter apenas letras, números e underscores.",
+        variant: "destructive"
+      });
       return false;
     }
     
-    // Verificar todas as colunas
+    // Verificar colunas
+    let hasPrimaryKey = false;
+    
     for (let i = 0; i < columns.length; i++) {
       const column = columns[i];
       
-      // Verificar se o nome da coluna está vazio
+      // Verificar se o nome da coluna está preenchido
       if (!column.name.trim()) {
-        setError(`O nome da coluna #${i + 1} é obrigatório`);
-        setActiveTab('columns');
+        toast({
+          title: "Nome de coluna obrigatório",
+          description: `A coluna ${i + 1} precisa de um nome.`,
+          variant: "destructive"
+        });
         return false;
       }
       
-      // Verificar se o nome da coluna contém apenas caracteres válidos
+      // Verificar formato do nome da coluna (apenas letras, números e underscores)
       if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(column.name)) {
-        setError(`O nome da coluna #${i + 1} deve começar com uma letra e conter apenas letras, números e underscores`);
-        setActiveTab('columns');
+        toast({
+          title: "Nome de coluna inválido",
+          description: `O nome da coluna "${column.name}" deve começar com uma letra e conter apenas letras, números e underscores.`,
+          variant: "destructive"
+        });
         return false;
+      }
+      
+      // Verificar duplicação de nomes de colunas
+      for (let j = 0; j < i; j++) {
+        if (column.name.toLowerCase() === columns[j].name.toLowerCase()) {
+          toast({
+            title: "Duplicação de nome de coluna",
+            description: `O nome da coluna "${column.name}" está duplicado.`,
+            variant: "destructive"
+          });
+          return false;
+        }
+      }
+      
+      // Verificar se há pelo menos uma chave primária
+      if (column.primary) {
+        hasPrimaryKey = true;
       }
     }
     
-    // Verificar nomes duplicados de colunas
-    const columnNames = columns.map(col => col.name.toLowerCase());
-    const duplicates = columnNames.filter((name, index) => columnNames.indexOf(name) !== index);
-    if (duplicates.length > 0) {
-      setError(`Existem nomes de colunas duplicados: ${duplicates.join(', ')}`);
-      setActiveTab('columns');
+    if (!hasPrimaryKey) {
+      toast({
+        title: "Chave primária ausente",
+        description: "A tabela precisa ter pelo menos uma coluna como chave primária.",
+        variant: "destructive"
+      });
       return false;
     }
     
     return true;
   };
   
-  const handleCreateTable = async () => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
     if (!validateForm()) {
       return;
     }
     
-    setIsCreating(true);
-    setError(null);
+    setSubmitting(true);
     
     try {
-      // Formatar os dados para envio
-      const tableData = {
-        name: tableName,
+      const response = await apiRequest('POST', '/api/database/tables', {
+        tableName,
         description: tableDescription,
-        generateApi,
-        columns: columns.map(col => ({
-          name: col.name,
-          type: col.type,
-          notNull: col.notNull,
-          primary: col.primary,
-          defaultValue: col.defaultValue || undefined
-        }))
-      };
+        columns,
+        timestamps: includeTimestamps,
+        softDelete: includeSoftDelete
+      });
       
-      // Enviar para a API
-      const response = await apiRequest(
-        'POST',
-        '/api/database/tables',
-        tableData
-      );
+      const data = await response.json();
       
       if (response.ok) {
-        const data = await response.json();
         toast({
-          title: "Tabela criada com sucesso",
-          description: `A tabela ${tableName} foi criada com sucesso no banco de dados.`,
+          title: "Tabela criada",
+          description: `A tabela ${tableName} foi criada com sucesso.`,
           variant: "default"
         });
         
-        // Callback para notificar o componente pai
+        resetForm();
+        setOpen(false);
+        
+        // Notificar o componente pai sobre a criação da tabela
         if (onTableCreated) {
           onTableCreated(tableName);
         }
-        
-        // Fechar o diálogo e resetar o formulário
-        setOpen(false);
-        resetForm();
       } else {
-        const errorData = await response.json();
-        setError(errorData.message || "Erro ao criar tabela");
+        toast({
+          title: "Erro ao criar tabela",
+          description: data.message || "Ocorreu um erro ao criar a tabela no banco de dados.",
+          variant: "destructive"
+        });
       }
     } catch (error) {
       console.error("Erro ao criar tabela:", error);
-      setError("Ocorreu um erro ao criar a tabela. Verifique o console para mais detalhes.");
+      toast({
+        title: "Erro de conexão",
+        description: "Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.",
+        variant: "destructive"
+      });
     } finally {
-      setIsCreating(false);
+      setSubmitting(false);
     }
   };
   
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="default" size="sm" className="gap-1">
-          <Plus className="h-3.5 w-3.5" />
+        <Button className="gap-1">
+          <Plus className="h-4 w-4" />
           Nova Tabela
         </Button>
       </DialogTrigger>
       
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Database className="h-5 w-5" />
             Criar Nova Tabela
           </DialogTitle>
           <DialogDescription>
-            Configure os detalhes da nova tabela e suas colunas. Uma vez criada, a tabela estará disponível para uso em componentes.
+            Defina o esquema da tabela. Colunas, tipos e relações serão criados automaticamente no banco de dados.
           </DialogDescription>
         </DialogHeader>
         
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 overflow-hidden flex flex-col">
-          <TabsList className="w-full">
-            <TabsTrigger value="basic" className="flex-1">Informações Básicas</TabsTrigger>
-            <TabsTrigger value="columns" className="flex-1">Colunas</TabsTrigger>
-            <TabsTrigger value="preview" className="flex-1">Visualização</TabsTrigger>
-          </TabsList>
-          
-          <ScrollArea className="flex-1 mt-4">
-            <div className="p-1">
-              <TabsContent value="basic" className="mt-0">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="table-name">Nome da Tabela <span className="text-destructive">*</span></Label>
-                    <Input
-                      id="table-name"
-                      placeholder="produtos, usuarios, pedidos, etc."
-                      value={tableName}
-                      onChange={(e) => setTableName(e.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Use nomes no plural e sem acentos. Exemplos: produtos, usuarios, pedidos.
-                    </p>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="table-description">Descrição</Label>
-                    <Input
-                      id="table-description"
-                      placeholder="Uma breve descrição da tabela e seu propósito"
-                      value={tableDescription}
-                      onChange={(e) => setTableDescription(e.target.value)}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="api-generation"
-                      checked={generateApi}
-                      onCheckedChange={setGenerateApi}
-                    />
-                    <Label htmlFor="api-generation" className="cursor-pointer">Gerar API automaticamente</Label>
-                  </div>
-                  
-                  {generateApi && (
-                    <Card>
-                      <CardContent className="p-4 text-sm">
-                        <div className="space-y-2">
-                          <p className="font-medium flex items-center gap-1">
-                            <CheckCircle2 className="h-4 w-4 text-primary" />
-                            Endpoints que serão gerados:
-                          </p>
-                          <ul className="space-y-1 text-muted-foreground">
-                            <li className="flex"><Badge variant="outline" className="mr-2 w-14 flex justify-center">GET</Badge> <span>/api/{tableName}</span></li>
-                            <li className="flex"><Badge variant="outline" className="mr-2 w-14 flex justify-center">GET</Badge> <span>/api/{tableName}/:id</span></li>
-                            <li className="flex"><Badge variant="outline" className="mr-2 w-14 flex justify-center">POST</Badge> <span>/api/{tableName}</span></li>
-                            <li className="flex"><Badge variant="outline" className="mr-2 w-14 flex justify-center">PATCH</Badge> <span>/api/{tableName}/:id</span></li>
-                            <li className="flex"><Badge variant="outline" className="mr-2 w-14 flex justify-center">DELETE</Badge> <span>/api/{tableName}/:id</span></li>
-                          </ul>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-                </div>
-              </TabsContent>
-              
-              <TabsContent value="columns" className="mt-0">
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-md font-medium">Colunas da Tabela</h3>
-                    <Button variant="outline" size="sm" onClick={handleAddColumn} className="gap-1">
-                      <Plus className="h-3.5 w-3.5" />
-                      Adicionar Coluna
-                    </Button>
-                  </div>
-                  
-                  <div className="space-y-3">
-                    {columns.map((column, index) => (
-                      <Card key={index} className="overflow-hidden">
-                        <CardContent className="p-4">
-                          <div className="flex flex-col gap-3">
-                            <div className="flex justify-between">
-                              <h4 className="font-medium text-sm flex items-center gap-2">
-                                {column.primary && (
-                                  <Badge variant="default" className="px-1 text-xs">PRIMÁRIA</Badge>
-                                )}
-                                {column.name || `Coluna #${index + 1}`}
-                              </h4>
-                              
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                onClick={() => handleRemoveColumn(index)}
-                                disabled={index === 0 && column.primary}
-                                className="h-6 w-6"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                            
-                            <div className="grid grid-cols-2 gap-3">
-                              <div className="space-y-1">
-                                <Label htmlFor={`column-name-${index}`} className="text-xs">Nome</Label>
-                                <Input
-                                  id={`column-name-${index}`}
-                                  className="h-8"
-                                  value={column.name}
-                                  onChange={(e) => handleColumnChange(index, 'name', e.target.value)}
-                                  disabled={index === 0 && column.primary}
-                                />
-                              </div>
-                              
-                              <div className="space-y-1">
-                                <Label htmlFor={`column-type-${index}`} className="text-xs">Tipo</Label>
-                                <Select
-                                  value={column.type}
-                                  onValueChange={(value) => handleColumnChange(index, 'type', value)}
-                                  disabled={index === 0 && column.primary}
-                                >
-                                  <SelectTrigger id={`column-type-${index}`} className="h-8">
-                                    <SelectValue placeholder="Selecione o tipo" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {COLUMN_TYPES.map(type => (
-                                      <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
-                            
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="flex items-center space-x-2">
-                                <Switch
-                                  id={`column-not-null-${index}`}
-                                  checked={column.notNull}
-                                  onCheckedChange={(value) => handleColumnChange(index, 'notNull', value)}
-                                  disabled={index === 0 && column.primary}
-                                />
-                                <Label htmlFor={`column-not-null-${index}`} className="text-xs cursor-pointer">
-                                  Obrigatório (NOT NULL)
-                                </Label>
-                              </div>
-                              
-                              <div className="flex items-center space-x-2">
-                                <Switch
-                                  id={`column-primary-${index}`}
-                                  checked={column.primary}
-                                  onCheckedChange={(value) => {
-                                    // Se estiver marcando como primária, desmarcar todas as outras
-                                    if (value) {
-                                      const updated = columns.map((col, i) => {
-                                        if (i === index) return { ...col, primary: true, notNull: true };
-                                        return { ...col, primary: false };
-                                      });
-                                      setColumns(updated);
-                                    } else {
-                                      handleColumnChange(index, 'primary', false);
-                                    }
-                                  }}
-                                  disabled={index === 0 && column.primary}
-                                />
-                                <Label htmlFor={`column-primary-${index}`} className="text-xs cursor-pointer">
-                                  Chave Primária
-                                </Label>
-                              </div>
-                            </div>
-                            
-                            {!column.primary && (
-                              <div className="space-y-1">
-                                <Label htmlFor={`column-default-${index}`} className="text-xs">Valor Padrão</Label>
-                                <Input
-                                  id={`column-default-${index}`}
-                                  className="h-8"
-                                  placeholder="Deixe em branco para NULL"
-                                  value={column.defaultValue || ''}
-                                  onChange={(e) => handleColumnChange(index, 'defaultValue', e.target.value)}
-                                />
-                              </div>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </div>
-              </TabsContent>
-              
-              <TabsContent value="preview" className="mt-0">
-                <div className="space-y-4">
-                  <h3 className="text-md font-medium mb-2">Prévia da Tabela</h3>
-                  
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <div>
-                            <h4 className="font-medium">{tableName || "<Nome da Tabela>"}</h4>
-                            <p className="text-sm text-muted-foreground">{tableDescription || "<Sem descrição>"}</p>
-                          </div>
-                          {generateApi && <Badge>API Habilitada</Badge>}
-                        </div>
-                        
-                        <div className="mt-4">
-                          <div className="border rounded-md">
-                            <div className="grid grid-cols-4 gap-2 p-2 bg-muted text-xs font-medium">
-                              <div>Nome</div>
-                              <div>Tipo</div>
-                              <div>Restrições</div>
-                              <div>Padrão</div>
-                            </div>
-                            
-                            <div className="divide-y">
-                              {columns.map((column, index) => (
-                                <div key={index} className="grid grid-cols-4 gap-2 p-2 text-xs">
-                                  <div className="font-medium flex items-center gap-1">
-                                    {column.name || `<Coluna ${index + 1}>`}
-                                    {column.primary && <Badge variant="default" className="py-0 px-1 text-[10px]">PK</Badge>}
-                                  </div>
-                                  <div>{COLUMN_TYPES.find(t => t.value === column.type)?.label || column.type}</div>
-                                  <div>
-                                    {column.notNull ? "NOT NULL" : "NULL"}
-                                  </div>
-                                  <div>{column.defaultValue || "NULL"}</div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </TabsContent>
+        <form onSubmit={handleSubmit} className="space-y-6 mt-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="tableName">Nome da Tabela</Label>
+              <Input
+                id="tableName"
+                value={tableName}
+                onChange={(e) => setTableName(e.target.value)}
+                placeholder="ex: produtos"
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                Use nomes no plural, apenas letras, números e underscores.
+              </p>
             </div>
-          </ScrollArea>
-        </Tabs>
-        
-        {error && (
-          <div className="mt-4 text-sm p-3 border border-destructive/50 bg-destructive/10 text-destructive rounded-md">
-            {error}
+            
+            <div className="space-y-2">
+              <Label htmlFor="tableDescription">Descrição (Opcional)</Label>
+              <Textarea
+                id="tableDescription"
+                value={tableDescription}
+                onChange={(e) => setTableDescription(e.target.value)}
+                placeholder="Descreva o propósito desta tabela"
+                className="h-[70px]"
+              />
+            </div>
           </div>
-        )}
-        
-        <DialogFooter className="mt-4">
-          <Button variant="outline" onClick={() => setOpen(false)} disabled={isCreating}>Cancelar</Button>
-          <Button
-            variant="default"
-            onClick={handleCreateTable}
-            disabled={isCreating}
-            className="gap-1"
-          >
-            {isCreating ? (
-              <>
-                <div className="h-4 w-4 border-2 border-current border-t-transparent animate-spin rounded-full" />
-                Criando...
-              </>
-            ) : (
-              <>
-                <Save className="h-4 w-4" />
-                Criar Tabela
-              </>
-            )}
-          </Button>
-        </DialogFooter>
+          
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Label className="text-base">Colunas</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addNewColumn}
+                className="gap-1"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Adicionar Coluna
+              </Button>
+            </div>
+            
+            <div className="border rounded-md overflow-hidden">
+              <div className="bg-muted py-2 px-4 text-sm font-medium grid grid-cols-[1fr_1fr_100px_100px_40px] gap-2">
+                <div>Nome</div>
+                <div>Tipo</div>
+                <div className="text-center">Não Nulo</div>
+                <div className="text-center">Chave Primária</div>
+                <div></div>
+              </div>
+              
+              <div className="divide-y">
+                {columns.map((column, index) => (
+                  <div key={index} className="py-2 px-4 grid grid-cols-[1fr_1fr_100px_100px_40px] gap-2 items-center">
+                    <Input
+                      value={column.name}
+                      onChange={(e) => updateColumn(index, 'name', e.target.value)}
+                      placeholder="Nome da coluna"
+                      disabled={index === 0 && column.name === 'id'}
+                    />
+                    
+                    <Select
+                      value={column.type}
+                      onValueChange={(value) => updateColumn(index, 'type', value)}
+                      disabled={index === 0 && column.name === 'id'}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o tipo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {COLUMN_TYPES.map((type) => (
+                          <SelectItem key={type.value} value={type.value}>
+                            {type.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    
+                    <div className="flex justify-center">
+                      <Checkbox
+                        checked={column.notNull}
+                        onCheckedChange={(checked) => updateColumn(index, 'notNull', checked)}
+                        disabled={column.primary || (index === 0 && column.name === 'id')}
+                      />
+                    </div>
+                    
+                    <div className="flex justify-center">
+                      <Checkbox
+                        checked={column.primary}
+                        onCheckedChange={(checked) => updateColumn(index, 'primary', checked)}
+                        disabled={index === 0 && column.name === 'id'}
+                      />
+                    </div>
+                    
+                    <div className="flex justify-center">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeColumn(index)}
+                        disabled={index === 0 && column.name === 'id'}
+                      >
+                        <X className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          
+          <div className="space-y-4">
+            <Label className="text-base">Opções Adicionais</Label>
+            
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="timestamps"
+                  checked={includeTimestamps}
+                  onCheckedChange={setIncludeTimestamps}
+                />
+                <Label htmlFor="timestamps" className="font-normal cursor-pointer">
+                  Incluir timestamps (created_at, updated_at)
+                </Label>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="softDelete"
+                  checked={includeSoftDelete}
+                  onCheckedChange={setIncludeSoftDelete}
+                />
+                <Label htmlFor="softDelete" className="font-normal cursor-pointer">
+                  Habilitar soft delete (deleted_at)
+                </Label>
+              </div>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+              disabled={submitting}
+            >
+              Cancelar
+            </Button>
+            
+            <Button type="submit" disabled={submitting} className="gap-1">
+              {submitting ? (
+                <>
+                  <span className="animate-spin">
+                    <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  </span>
+                  Criando...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4" />
+                  Criar Tabela
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );
-};
-
-export default NewDatabaseTable;
+}

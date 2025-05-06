@@ -8,11 +8,75 @@ import * as schema from "@shared/schema";
 import { randomUUID } from "crypto";
 import Stripe from "stripe";
 import { createPaypalOrder, capturePaypalOrder, loadPaypalDefault } from "./paypal";
+import pkg from 'pg';
+const { Pool } = pkg;
+
+// Pool para queries SQL diretas (necessário para criar tabelas dinâmicas)
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 // Initialize Stripe
 const stripeInstance = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2023-10-16",
+  apiVersion: "2023-10-16" as any,
 }) : null;
+
+// Auxiliar para mapear tipos de coluna do formulário para SQL
+function mapTypeToSQL(type: string): string {
+  switch (type.toLowerCase()) {
+    case 'string':
+    case 'text':
+      return 'TEXT';
+    case 'integer':
+    case 'int':
+      return 'INTEGER';
+    case 'number':
+    case 'float':
+    case 'decimal':
+      return 'NUMERIC';
+    case 'boolean':
+    case 'bool':
+      return 'BOOLEAN';
+    case 'date':
+      return 'DATE';
+    case 'timestamp':
+    case 'datetime':
+      return 'TIMESTAMP';
+    case 'json':
+    case 'object':
+      return 'JSONB';
+    case 'uuid':
+      return 'UUID';
+    case 'serial':
+    case 'autoincrement':
+      return 'SERIAL';
+    default:
+      return 'TEXT';
+  }
+}
+
+// Auxiliar para formatar valores SQL baseado no tipo
+function formatSQLValue(value: any, type: string): string {
+  if (value === null || value === undefined) {
+    return 'NULL';
+  }
+  
+  switch (type.toLowerCase()) {
+    case 'string':
+    case 'text':
+    case 'uuid':
+    case 'date':
+    case 'timestamp':
+    case 'datetime':
+      return `'${value.replace(/'/g, "''")}'`;
+    case 'boolean':
+    case 'bool':
+      return value ? 'TRUE' : 'FALSE';
+    case 'json':
+    case 'object':
+      return `'${JSON.stringify(value).replace(/'/g, "''")}'::JSONB`;
+    default: // números
+      return String(value);
+  }
+}
 
 // Rota para criação de tabelas de banco de dados
 async function handleCreateDatabaseTable(req: Request, res: Response) {
@@ -99,6 +163,63 @@ async function handleCreateDatabaseTable(req: Request, res: Response) {
     console.error('Erro ao criar tabela:', error);
     return res.status(500).json({
       message: 'Erro ao criar tabela no banco de dados',
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
+}
+
+// Rota para listar tabelas do banco de dados
+async function handleGetDatabaseTables(req: Request, res: Response) {
+  try {
+    // Consulta para obter todas as tabelas do schema public exceto as do drizzle
+    const tablesQuery = `
+      SELECT 
+        tablename as name,
+        obj_description(('public.' || tablename)::regclass, 'pg_class') as description,
+        (SELECT COUNT(*) FROM ${name}) as "rowCount",
+        NOW() as "createdAt"
+      FROM 
+        pg_tables 
+      WHERE 
+        schemaname = 'public' 
+        AND tablename NOT LIKE 'drizzle%'
+        AND tablename != 'pgmigrations'
+      ORDER BY 
+        tablename
+    `;
+    
+    try {
+      const result = await pool.query(tablesQuery.replace(/\${name}/g, 'information_schema.tables'));
+      
+      // Para cada tabela, consultar novamente para obter o número real de linhas
+      const tablesWithCounts = await Promise.all(result.rows.map(async (table) => {
+        try {
+          const countResult = await pool.query(`SELECT COUNT(*) as count FROM ${table.name}`);
+          return {
+            ...table,
+            rowCount: parseInt(countResult.rows[0].count, 10)
+          };
+        } catch (err) {
+          // Se houver erro ao contar, manter o valor zero
+          return {
+            ...table,
+            rowCount: 0
+          };
+        }
+      }));
+      
+      return res.json({
+        tables: tablesWithCounts
+      });
+    } catch (error) {
+      // Se ocorrer um erro ao listar as tabelas, retornar lista vazia
+      console.error("Erro ao listar tabelas:", error);
+      return res.json({ tables: [] });
+    }
+  } catch (error) {
+    console.error('Erro ao listar tabelas:', error);
+    return res.status(500).json({
+      message: 'Erro ao listar tabelas do banco de dados',
       error: error instanceof Error ? error.message : String(error)
     });
   }
