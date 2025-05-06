@@ -227,16 +227,59 @@ const Canvas = ({ viewMode, zoom }: CanvasProps) => {
                 <div className="h-6 w-px bg-border mx-1"></div>
 
                 <div className="flex items-center space-x-1">
-                  <Button variant="outline" size="sm" onClick={() => useEditorStore.getState().saveProject()} title="Salvar Projeto">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => {
+                      const result = useEditorStore.getState().saveProject();
+                      if (result && result.success) {
+                        toast({
+                          title: result.isNew ? "Novo projeto criado" : "Projeto salvo",
+                          description: result.isNew
+                            ? `Projeto "${result.projectName}" foi criado e salvo com sucesso.`
+                            : `Projeto "${result.projectName}" foi salvo com sucesso.`,
+                          variant: "default",
+                        });
+                      } else if (result && !result.success) {
+                        toast({
+                          title: "Erro ao salvar projeto",
+                          description: result.error || "Ocorreu um erro ao tentar salvar o projeto.",
+                          variant: "destructive",
+                        });
+                      }
+                    }} 
+                    title="Salvar Projeto"
+                    className="relative group"
+                  >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
                     </svg>
+                    <span className="absolute invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-opacity bg-black text-white text-xs rounded py-1 px-2 right-0 bottom-full mb-2 w-32 z-50">
+                      Salvar projeto atual
+                    </span>
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => useEditorStore.getState().toggleFullscreenPreview()} 
-                    title="Visualização em Tela Cheia">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => {
+                      useEditorStore.getState().toggleFullscreenPreview();
+                      toast({
+                        title: useEditorStore.getState().fullscreenPreview ? "Modo tela cheia ativado" : "Modo tela cheia desativado",
+                        description: useEditorStore.getState().fullscreenPreview 
+                          ? "Visualizando seu site em tela cheia. Pressione ESC para sair."
+                          : "Voltando ao modo normal de edição.",
+                        duration: 3000,
+                      });
+                    }} 
+                    title="Visualização em Tela Cheia"
+                    className="relative group"
+                  >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
                     </svg>
+                    <span className="absolute invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-opacity bg-black text-white text-xs rounded py-1 px-2 right-0 bottom-full mb-2 w-32 z-50">
+                      Visualizar em tela cheia
+                    </span>
                   </Button>
                 </div>
 

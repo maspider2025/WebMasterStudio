@@ -232,10 +232,10 @@ interface EditorState {
   // Page & Project Operations
   loadTemplate: (elements: Element[]) => void;
   clearCanvas: () => void;
-  saveProject: () => void;
+  saveProject: () => { success: boolean; message: string; projectName: string; isNew: boolean; error?: string; } | undefined;
   loadProject: (projectId: string) => Promise<void>;
   createNewProject: (name: string, description?: string) => void;
-  addPage: (page: Omit<EditorPage, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  addPage: (page: Omit<EditorPage, 'id' | 'createdAt' | 'updatedAt'>) => { success: boolean; message: string; pageId: string; pageName: string; } | undefined;
   removePage: (pageId: string) => void;
   renamePage: (pageId: string, name: string) => void;
   duplicatePage: (pageId: string) => void;
