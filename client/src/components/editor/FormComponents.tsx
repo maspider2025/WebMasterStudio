@@ -601,7 +601,7 @@ export const FormComponent = ({ element, isEditMode, onChange }: FormFieldProps)
   };
   
   // Handler para duplicar um campo
-  const handleFieldDuplicate = (field: Element) => {
+  const handleFieldDuplicateAction = (field: Element) => {
     if (!element.children) return;
     
     // Cria uma cópia do campo com um novo ID
@@ -810,6 +810,37 @@ export const FormComponent = ({ element, isEditMode, onChange }: FormFieldProps)
     minHeight: '200px'
   } : {};
   
+  // Tratamento para eventos de formulário
+  useEffect(() => {
+    // Event handlers para ações nos campos
+    const handleFieldDeleteEvent = (e: CustomEvent) => {
+      const { id } = e.detail;
+      handleFieldDelete(id);
+    };
+    
+    const handleFieldDuplicateEvent = (e: CustomEvent) => {
+      const { element: fieldElement } = e.detail;
+      handleFieldDuplicateAction(fieldElement);
+    };
+    
+    const handleFieldEditEvent = (e: CustomEvent) => {
+      const { id } = e.detail;
+      handleFieldEdit(id);
+    };
+    
+    // Adicionar event listeners
+    document.addEventListener('field:delete', handleFieldDeleteEvent as EventListener);
+    document.addEventListener('field:duplicate', handleFieldDuplicateEvent as EventListener);
+    document.addEventListener('field:edit', handleFieldEditEvent as EventListener);
+    
+    // Cleanup event listeners quando o componente for desmontado
+    return () => {
+      document.removeEventListener('field:delete', handleFieldDeleteEvent as EventListener);
+      document.removeEventListener('field:duplicate', handleFieldDuplicateEvent as EventListener);
+      document.removeEventListener('field:edit', handleFieldEditEvent as EventListener);
+    };
+  }, []);
+  
   return (
     <div className="w-full h-full overflow-auto">
       {isEditMode && (
@@ -852,14 +883,23 @@ export const FormComponent = ({ element, isEditMode, onChange }: FormFieldProps)
       
       <form 
         onSubmit={handleSubmit} 
-        className="space-y-4 w-full p-4"
+        className="space-y-0 w-full p-4"
         style={formStyle}
       >
         {childElements.length > 0 ? (
           <>
-            {childElements.map((childElement) => renderFormElement(childElement, isEditMode))}
+            {/* Área de soltar inicial */}
+            {isEditMode && <FormFieldDropArea parentId={element.id} index={0} onDrop={handleFieldMove} />}
             
-            {isEditMode && childElements.length > 0 && !childElements.some(el => el.type === ElementTypes.button) && (
+            {/* Renderiza os campos e as áreas de soltar entre eles */}
+            {orderedElements.map((childElement, index) => (
+              <React.Fragment key={childElement.id}>
+                {renderFormElement(childElement, isEditMode, element.id)}
+                {isEditMode && <FormFieldDropArea parentId={element.id} index={index + 1} onDrop={handleFieldMove} />}
+              </React.Fragment>
+            ))}
+            
+            {isEditMode && orderedElements.length > 0 && !orderedElements.some(el => el.type === ElementTypes.button) && (
               <div className="flex justify-center pt-4">
                 <button 
                   onClick={() => addFieldToForm(ElementTypes.button)}
@@ -960,7 +1000,35 @@ export const FormComponent = ({ element, isEditMode, onChange }: FormFieldProps)
 /**
  * Função auxiliar para renderizar o componente de formulário apropriado
  */
-export const renderFormElement = (element: Element, isEditMode: boolean) => {
+export const renderFormElement = (element: Element, isEditMode: boolean, parentId?: string) => {
+  // Se estamos no modo de edição e temos um parentId, usar o componente arrastável
+  if (isEditMode && parentId) {
+    return (
+      <DraggableFormField
+        key={element.id}
+        element={element}
+        isEditMode={isEditMode}
+        parentId={parentId}
+        onDelete={() => {
+          // Esta função será tratada pelo componente pai (FormComponent)
+          const event = new CustomEvent('field:delete', { detail: { id: element.id } });
+          document.dispatchEvent(event);
+        }}
+        onDuplicate={() => {
+          // Esta função será tratada pelo componente pai (FormComponent)
+          const event = new CustomEvent('field:duplicate', { detail: { element } });
+          document.dispatchEvent(event);
+        }}
+        onEdit={() => {
+          // Esta função será tratada pelo componente pai (FormComponent)
+          const event = new CustomEvent('field:edit', { detail: { id: element.id } });
+          document.dispatchEvent(event);
+        }}
+      />
+    );
+  }
+  
+  // Caso contrário, usar o componente normal
   switch (element.type) {
     case ElementTypes.input:
       return <FormTextField key={element.id} element={element} isEditMode={isEditMode} />;
