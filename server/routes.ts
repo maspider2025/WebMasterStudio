@@ -1557,38 +1557,112 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Endpoint para obter todas as tabelas criadas dinamicamente
   app.get(`${apiPrefix}/database/tables`, async (req, res) => {
     try {
+      const projectId = req.query.projectId ? parseInt(req.query.projectId as string, 10) : null;
+      
+      if (!projectId) {
+        return res.status(400).json({ message: "É necessário fornecer o ID do projeto" });
+      }
+      
+      // Primeiro, verificar se temos tabelas registradas para este projeto
+      const projectTables = await db.query.projectDatabases.findMany({
+        where: eq(schema.projectDatabases.projectId, projectId)
+      });
+      
+      // Se já temos tabelas registradas, retornamos elas
+      if (projectTables.length > 0) {
+        const tablesWithDetails = await Promise.all(projectTables.map(async (table) => {
+          // Contar registros na tabela
+          let rowCount = 0;
+          try {
+            const countQuery = sql`SELECT COUNT(*) as count FROM ${sql.identifier(table.tableName)}`;
+            const countResult = await db.execute(countQuery);
+            rowCount = parseInt(countResult.rows[0].count, 10);
+          } catch (err) {
+            console.error(`Erro ao contar registros da tabela ${table.tableName}:`, err);
+          }
+          
+          return {
+            id: table.id,
+            name: table.tableName,
+            displayName: table.displayName,
+            rowCount,
+            description: table.description || "",
+            hasApi: table.apiEnabled,
+            isBuiltIn: table.isBuiltIn,
+            createdAt: table.createdAt.toISOString()
+          };
+        }));
+        
+        return res.json({ tables: tablesWithDetails });
+      }
+      
+      // Se não temos tabelas registradas ainda, verificamos quais tabelas poderiam pertencer ao projeto
       // Buscar todas as tabelas disponíveis no banco de dados
       const query = sql`
         SELECT table_name 
         FROM information_schema.tables 
         WHERE table_schema = 'public' 
         AND table_type = 'BASE TABLE'
-        AND table_name NOT IN ('_drizzle_migrations')
+        AND table_name NOT IN ('_drizzle_migrations', 'project_databases', 'project_apis',
+                              'users', 'projects', 'pages', 'elements', 'templates', 'template_elements')
         ORDER BY table_name;
       `;
       
       const result = await db.execute(query);
       
-      // Obter informações detalhadas de cada tabela
-      const tablesWithDetails = await Promise.all(result.rows.map(async (row: any) => {
-        const tableName = row.table_name;
+      // Filtrar apenas tabelas que poderiam ser do projeto (prefixo p{id}_)
+      const projectPrefix = `p${projectId}_`;
+      const projectTableNames = result.rows
+        .map((row: any) => row.table_name)
+        .filter((tableName: string) => 
+          tableName.startsWith(projectPrefix) || 
+          // Verificar também se a tabela está nas tabelas de e-commerce e tem projectId
+          ['products', 'product_categories', 'orders', 'customers', 'carts'].includes(tableName));
+      
+      // Registrar estas tabelas no banco de dados para o projeto
+      for (const tableName of projectTableNames) {
+        const isEcommerceTable = ['products', 'product_categories', 'orders', 'customers', 'carts'].includes(tableName);
         
+        // Registra a tabela no sistema
+        await db.insert(schema.projectDatabases).values({
+          projectId,
+          tableName,
+          displayName: isEcommerceTable 
+            ? tableName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+            : schema.getDisplayNameFromTableName(tableName),
+          description: isEcommerceTable ? `Tabela de e-commerce: ${tableName}` : `Tabela personalizada para o projeto`,
+          isBuiltIn: isEcommerceTable,
+          isGenerated: true,
+          apiEnabled: true,
+          structure: {}
+        });
+      }
+      
+      // Agora busca as tabelas recém-registradas
+      const newProjectTables = await db.query.projectDatabases.findMany({
+        where: eq(schema.projectDatabases.projectId, projectId)
+      });
+      
+      const tablesWithDetails = await Promise.all(newProjectTables.map(async (table) => {
         // Contar registros na tabela
         let rowCount = 0;
         try {
-          const countQuery = sql`SELECT COUNT(*) as count FROM ${sql.identifier(tableName)}`;
+          const countQuery = sql`SELECT COUNT(*) as count FROM ${sql.identifier(table.tableName)}`;
           const countResult = await db.execute(countQuery);
           rowCount = parseInt(countResult.rows[0].count, 10);
         } catch (err) {
-          console.error(`Erro ao contar registros da tabela ${tableName}:`, err);
+          console.error(`Erro ao contar registros da tabela ${table.tableName}:`, err);
         }
         
         return {
-          name: tableName,
+          id: table.id,
+          name: table.tableName,
+          displayName: table.displayName,
           rowCount,
-          description: "", // No futuro, podemos adicionar metadados para descrições
-          hasApi: true,    // Assumimos que todas as tabelas têm API
-          createdAt: new Date().toISOString()
+          description: table.description || "",
+          hasApi: table.apiEnabled,
+          isBuiltIn: table.isBuiltIn,
+          createdAt: table.createdAt.toISOString()
         };
       }));
       

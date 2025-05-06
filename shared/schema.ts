@@ -1,7 +1,27 @@
 import { pgTable, text, serial, integer, boolean, jsonb, timestamp, varchar, decimal, unique, pgEnum } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
+import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
+
+// Importar definições de tabelas para banco de dados e APIs de projetos
+import {
+  projectDatabases, projectApis, projectDatabasesRelations, projectApisRelations,
+  projectDatabasesInsertSchema, projectDatabasesSelectSchema, 
+  projectApisInsertSchema, projectApisSelectSchema,
+  generateProjectTableName, isProjectTable, getDisplayNameFromTableName,
+  type ProjectDatabase, type InsertProjectDatabase,
+  type ProjectApi, type InsertProjectApi
+} from "./project-database-association";
+
+// Reexportar para uso em outros módulos
+export {
+  projectDatabases, projectApis, projectDatabasesRelations, projectApisRelations,
+  projectDatabasesInsertSchema, projectDatabasesSelectSchema, 
+  projectApisInsertSchema, projectApisSelectSchema,
+  generateProjectTableName, isProjectTable, getDisplayNameFromTableName,
+  type ProjectDatabase, type InsertProjectDatabase,
+  type ProjectApi, type InsertProjectApi
+};
 
 // User schema
 export const users = pgTable("users", {
