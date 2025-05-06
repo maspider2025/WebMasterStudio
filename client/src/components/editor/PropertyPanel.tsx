@@ -666,10 +666,10 @@ const PropertyPanel = () => {
           <div className="flex-1 overflow-y-auto">
             {selectedElement && (
               <HtmlEditor
-                htmlContent={selectedElement.content || ''}
+                htmlContent={selectedElement.customCode?.html || selectedElement.content || ''}
                 cssContent={selectedElement.customCode?.css || ''}
                 jsContent={selectedElement.customCode?.js || ''}
-                onHtmlChange={(html) => updateElementContent(selectedElement.id, { content: html })}
+                onHtmlChange={(html) => handleUpdateHtml(html)}
                 onCssChange={(css) => handleUpdateCss(css)}
                 onJsChange={(js) => handleUpdateJs(js)}
               />
