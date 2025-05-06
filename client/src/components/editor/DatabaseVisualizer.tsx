@@ -37,7 +37,8 @@ export function DatabaseVisualizer({ projectId = '1' }: DatabaseVisualizerProps)
   const loadTables = async () => {
     setIsLoading(true);
     try {
-      const response = await apiRequest('GET', `/api/database/tables?projectId=${projectId}`);
+      const response = await apiRequest('GET', `/api/database/tables`);
+      // Futuramente poderemos filtrar por projeto, mas por enquanto listaremos todas as tabelas
       const data = await response.json();
       
       if (response.ok) {

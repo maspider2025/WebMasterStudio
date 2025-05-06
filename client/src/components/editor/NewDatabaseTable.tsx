@@ -173,11 +173,12 @@ export default function NewDatabaseTable({ onTableCreated }: NewDatabaseTablePro
     
     try {
       const response = await apiRequest('POST', '/api/database/tables', {
-        tableName,
+        name: tableName,
         description: tableDescription,
         columns,
         timestamps: includeTimestamps,
-        softDelete: includeSoftDelete
+        softDelete: includeSoftDelete,
+        generateApi: true // Habilitar geração automática de API
       });
       
       const data = await response.json();
