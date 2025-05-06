@@ -39,7 +39,14 @@ export default function ApiViewer({ projectId }: ApiViewerProps) {
   const [activeTab, setActiveTab] = useState<string>('todos');
 
   const { data, isLoading, error } = useQuery({
-    queryKey: [`/api/project-apis?projectId=${projectId}`],
+    queryKey: [`/api/project-apis`],
+    queryFn: async () => {
+      const response = await fetch(`/api/project-apis?projectId=${projectId}`);
+      if (!response.ok) {
+        throw new Error('Falha ao carregar APIs do projeto');
+      }
+      return response.json();
+    },
     enabled: !!projectId,
   });
 

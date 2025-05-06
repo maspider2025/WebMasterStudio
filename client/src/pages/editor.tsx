@@ -6,6 +6,7 @@ import Canvas from "@/components/editor/Canvas";
 import PropertyPanel from "@/components/editor/PropertyPanel";
 import CodeEditor from "@/components/editor/CodeEditor";
 import { DatabaseVisualizer } from "@/components/editor/DatabaseVisualizer";
+import ApiViewer from "@/components/ApiViewer";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { useEditorStore } from "@/lib/editor-store";
@@ -282,6 +283,10 @@ export default function Editor() {
                 {codeEditorTab === 'database' ? (
                   <div className="h-full overflow-hidden">
                     <DatabaseVisualizer projectId="default" />
+                  </div>
+                ) : codeEditorTab === 'api' ? (
+                  <div className="h-full overflow-auto p-4">
+                    <ApiViewer projectId={Number(new URLSearchParams(window.location.search).get('id')) || 0} />
                   </div>
                 ) : (
                   <CodeEditor 
