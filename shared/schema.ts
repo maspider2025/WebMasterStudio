@@ -270,6 +270,122 @@ export const cartItems = pgTable("cart_items", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Reviews - Avaliações de produtos
+export const reviews = pgTable("reviews", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").references(() => projects.id).notNull(),
+  productId: integer("product_id").references(() => products.id).notNull(),
+  customerId: integer("customer_id").references(() => customers.id),
+  title: text("title"),
+  content: text("content").notNull(),
+  rating: integer("rating").notNull(), // 1-5 stars
+  status: text("status").default("pending"), // pending, approved, rejected
+  isVerifiedPurchase: boolean("is_verified_purchase").default(false),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Wishlist - Lista de desejos
+export const wishlists = pgTable("wishlists", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").references(() => projects.id).notNull(),
+  customerId: integer("customer_id").references(() => customers.id).notNull(),
+  name: text("name").default("Default"),
+  isPublic: boolean("is_public").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const wishlistItems = pgTable("wishlist_items", {
+  id: serial("id").primaryKey(),
+  wishlistId: integer("wishlist_id").references(() => wishlists.id).notNull(),
+  productId: integer("product_id").references(() => products.id).notNull(),
+  variantId: integer("variant_id").references(() => productVariants.id),
+  addedAt: timestamp("added_at").defaultNow().notNull(),
+});
+
+// Discounts - Cupons e descontos
+export const discountTypeEnum = pgEnum('discount_type', ['percentage', 'fixed_amount', 'free_shipping', 'buy_x_get_y']);
+
+export const discounts = pgTable("discounts", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").references(() => projects.id).notNull(),
+  code: text("code").notNull(),
+  description: text("description"),
+  type: discountTypeEnum("type").default("percentage"),
+  value: decimal("value", { precision: 10, scale: 2 }),
+  minOrderValue: decimal("min_order_value", { precision: 10, scale: 2 }),
+  maxUses: integer("max_uses"),
+  usesCount: integer("uses_count").default(0),
+  isActive: boolean("is_active").default(true),
+  startsAt: timestamp("starts_at"),
+  expiresAt: timestamp("expires_at"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ProductTags - Tags de produtos para SEO
+export const productTags = pgTable("product_tags", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").references(() => projects.id).notNull(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const productTagRelations = pgTable("product_tag_relations", {
+  id: serial("id").primaryKey(),
+  productId: integer("product_id").references(() => products.id).notNull(),
+  tagId: integer("tag_id").references(() => productTags.id).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  uniqueConstraint: unique().on(t.productId, t.tagId),
+}));
+
+// Shipping Methods
+export const shippingMethods = pgTable("shipping_methods", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").references(() => projects.id).notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
+  estimatedDeliveryTime: text("estimated_delivery_time"),
+  isActive: boolean("is_active").default(true),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Inventory Management
+export const inventory = pgTable("inventory", {
+  id: serial("id").primaryKey(),
+  productId: integer("product_id").references(() => products.id),
+  variantId: integer("variant_id").references(() => productVariants.id),
+  sku: text("sku").notNull(),
+  quantity: integer("quantity").default(0).notNull(),
+  lowStockThreshold: integer("low_stock_threshold").default(5),
+  reservedQuantity: integer("reserved_quantity").default(0),
+  location: text("location"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Inventory History
+export const inventoryHistory = pgTable("inventory_history", {
+  id: serial("id").primaryKey(),
+  inventoryId: integer("inventory_id").references(() => inventory.id).notNull(),
+  type: text("type").notNull(), // adjustment, order, return, restock
+  quantity: integer("quantity").notNull(), // can be positive or negative
+  reference: text("reference"), // order number, adjustment ID, etc.
+  notes: text("notes"),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const settings = pgTable("settings", {
   id: serial("id").primaryKey(),
   projectId: integer("project_id").references(() => projects.id).notNull(),
@@ -291,10 +407,15 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   pages: many(pages),
   products: many(products),
   productCategories: many(productCategories),
+  productTags: many(productTags),
   customers: many(customers),
   orders: many(orders),
   carts: many(carts),
   settings: many(settings),
+  discounts: many(discounts),
+  shippingMethods: many(shippingMethods),
+  reviews: many(reviews),
+  wishlists: many(wishlists),
 }));
 
 export const pagesRelations = relations(pages, ({ one, many }) => ({
@@ -332,6 +453,10 @@ export const productsRelations = relations(products, ({ one, many }) => ({
   variants: many(productVariants),
   orderItems: many(orderItems),
   cartItems: many(cartItems),
+  reviews: many(reviews),
+  tags: many(productTagRelations, { relationName: "product_tags" }),
+  wishlistItems: many(wishlistItems),
+  inventory: many(inventory),
 }));
 
 export const productCategoryRelationsRelations = relations(productCategoryRelations, ({ one }) => ({
@@ -351,6 +476,8 @@ export const customersRelations = relations(customers, ({ one, many }) => ({
   addresses: many(addresses),
   orders: many(orders),
   carts: many(carts),
+  reviews: many(reviews),
+  wishlists: many(wishlists),
 }));
 
 export const addressesRelations = relations(addresses, ({ one, many }) => ({
@@ -584,6 +711,88 @@ export const insertSettingSchema = createInsertSchema(settings).pick({
   value: true,
 });
 
+// Schemas para as novas tabelas
+export const insertReviewSchema = createInsertSchema(reviews).pick({
+  projectId: true,
+  productId: true,
+  customerId: true,
+  title: true,
+  content: true,
+  rating: true,
+  status: true,
+  isVerifiedPurchase: true,
+  metadata: true,
+});
+
+export const insertWishlistSchema = createInsertSchema(wishlists).pick({
+  projectId: true,
+  customerId: true,
+  name: true,
+  isPublic: true,
+});
+
+export const insertWishlistItemSchema = createInsertSchema(wishlistItems).pick({
+  wishlistId: true,
+  productId: true,
+  variantId: true,
+});
+
+export const insertDiscountSchema = createInsertSchema(discounts).pick({
+  projectId: true,
+  code: true,
+  description: true,
+  type: true,
+  value: true,
+  minOrderValue: true,
+  maxUses: true,
+  usesCount: true,
+  isActive: true,
+  startsAt: true,
+  expiresAt: true,
+  metadata: true,
+});
+
+export const insertProductTagSchema = createInsertSchema(productTags).pick({
+  projectId: true,
+  name: true,
+  slug: true,
+});
+
+export const insertProductTagRelationSchema = createInsertSchema(productTagRelations).pick({
+  productId: true,
+  tagId: true,
+});
+
+export const insertShippingMethodSchema = createInsertSchema(shippingMethods).pick({
+  projectId: true,
+  name: true,
+  description: true,
+  price: true,
+  estimatedDeliveryTime: true,
+  isActive: true,
+  metadata: true,
+});
+
+export const insertInventorySchema = createInsertSchema(inventory).pick({
+  productId: true,
+  variantId: true,
+  sku: true,
+  quantity: true,
+  lowStockThreshold: true,
+  reservedQuantity: true,
+  location: true,
+  metadata: true,
+});
+
+export const insertInventoryHistorySchema = createInsertSchema(inventoryHistory).pick({
+  inventoryId: true,
+  type: true,
+  quantity: true,
+  reference: true,
+  notes: true,
+  createdBy: true,
+});
+
 // Export types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -637,6 +846,34 @@ export type CartItem = typeof cartItems.$inferSelect;
 
 export type InsertSetting = z.infer<typeof insertSettingSchema>;
 export type Setting = typeof settings.$inferSelect;
+
+// Tipos para as novas tabelas
+export type InsertReview = z.infer<typeof insertReviewSchema>;
+export type Review = typeof reviews.$inferSelect;
+
+export type InsertWishlist = z.infer<typeof insertWishlistSchema>;
+export type Wishlist = typeof wishlists.$inferSelect;
+
+export type InsertWishlistItem = z.infer<typeof insertWishlistItemSchema>;
+export type WishlistItem = typeof wishlistItems.$inferSelect;
+
+export type InsertDiscount = z.infer<typeof insertDiscountSchema>;
+export type Discount = typeof discounts.$inferSelect;
+
+export type InsertProductTag = z.infer<typeof insertProductTagSchema>;
+export type ProductTag = typeof productTags.$inferSelect;
+
+export type InsertProductTagRelation = z.infer<typeof insertProductTagRelationSchema>;
+export type ProductTagRelation = typeof productTagRelations.$inferSelect;
+
+export type InsertShippingMethod = z.infer<typeof insertShippingMethodSchema>;
+export type ShippingMethod = typeof shippingMethods.$inferSelect;
+
+export type InsertInventory = z.infer<typeof insertInventorySchema>;
+export type Inventory = typeof inventory.$inferSelect;
+
+export type InsertInventoryHistory = z.infer<typeof insertInventoryHistorySchema>;
+export type InventoryHistory = typeof inventoryHistory.$inferSelect;
 
 // Interface para tipo Element, incluindo propriedades de conexão com banco de dados
 export interface DatabaseConnection {
