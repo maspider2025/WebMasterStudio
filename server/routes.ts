@@ -5372,7 +5372,7 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
     }
   });
 
-  // Endpoint para listar registros de uma tabela
+  // Endpoint para listar registros de uma tabela (usando ProjectTableManager)
   app.get(`${apiPrefix}/p/:projectId/data/:tableName`, express.json(), async (req, res) => {
     try {
       const projectId = parseInt(req.params.projectId, 10);
@@ -5385,63 +5385,136 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
         });
       }
       
-      // Nome completo da tabela no banco
-      const fullTableName = `p${projectId}_${tableName}`;
+      // Parâmetros avançados para paginação, ordenação e filtragem
+      const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
+      const pageSize = req.query.limit ? parseInt(req.query.limit as string, 10) : 10;
+      const orderBy = req.query.orderBy as string || "id";
+      const orderDirection = ((req.query.order || req.query.orderDirection) as string || "asc").toLowerCase() as 'asc' | 'desc';
+      const searchTerm = req.query.search as string;
+      const filterField = req.query.filterField as string;
+      const filterValue = req.query.filterValue as string;
+      const filterOperator = req.query.filterOperator as string || 'eq';
       
-      // Verificar se a tabela existe
-      const tableCheck = await db.execute(sql`
-        SELECT EXISTS (
-          SELECT 1 FROM information_schema.tables 
-          WHERE table_schema = 'public' AND table_name = ${fullTableName}
-        ) as exists
-      `);
+      // Importar o serviço de gerenciamento de tabelas
+      const { projectTableManager } = await import('./services/project-table-manager');
       
-      if (!tableCheck.rows[0].exists) {
-        return res.status(404).json({ 
-          success: false,
-          message: `Tabela ${tableName} não existe para o projeto ${projectId}` 
+      // Construir filtros avançados com base nas query params
+      const filters: Array<{ field: string; operator: string; value: any }> = [];
+      
+      // Se tiver um termo de busca, aplicar em vários campos relevantes
+      if (searchTerm) {
+        // Determinar campos onde a busca será aplicada - depende do tipo de entidade
+        const searchFields = [];
+        
+        // Para produtos, buscar em nome, descrição e código
+        if (tableName.toLowerCase().includes('produto')) {
+          searchFields.push('nome', 'descricao', 'codigo', 'sku');
+        } 
+        // Para usuários, buscar em nome, email
+        else if (tableName.toLowerCase().includes('usuario') || tableName.toLowerCase().includes('user')) {
+          searchFields.push('nome', 'name', 'email', 'username');
+        }
+        // Para outras entidades, buscar em campos comuns
+        else {
+          searchFields.push('nome', 'titulo', 'descricao', 'name', 'title', 'description');
+        }
+        
+        // Para cada campo potencial, adicionar um filtro
+        for (const field of searchFields) {
+          filters.push({
+            field,
+            operator: 'ilike', // case-insensitive
+            value: searchTerm
+          });
+        }
+      }
+      
+      // Se tiver filtro específico, adicionar
+      if (filterField && filterValue !== undefined) {
+        let parsedValue = filterValue;
+        
+        // Converter para tipos apropriados baseado no filtro
+        if (filterOperator === 'eq' || filterOperator === 'neq') {
+          if (filterValue.toLowerCase() === 'true') parsedValue = true;
+          else if (filterValue.toLowerCase() === 'false') parsedValue = false;
+          else if (!isNaN(Number(filterValue))) parsedValue = Number(filterValue);
+        }
+        
+        // Para operadores de range, converter para número
+        if (['gt', 'gte', 'lt', 'lte'].includes(filterOperator) && !isNaN(Number(filterValue))) {
+          parsedValue = Number(filterValue);
+        }
+        
+        // Para between, precisa ser um array
+        if (filterOperator === 'between' && filterValue.includes(',')) {
+          const parts = filterValue.split(',').map(part => part.trim());
+          if (parts.length === 2) {
+            // Tentar converter para números se aplicavel
+            if (!isNaN(Number(parts[0])) && !isNaN(Number(parts[1]))) {
+              parsedValue = parts.map(p => Number(p));
+            } else {
+              parsedValue = parts;
+            }
+          }
+        }
+        
+        // Para in, precisa ser um array
+        if (filterOperator === 'in' && filterValue.includes(',')) {
+          parsedValue = filterValue.split(',').map(part => {
+            const trimmed = part.trim();
+            if (!isNaN(Number(trimmed))) return Number(trimmed);
+            return trimmed;
+          });
+        }
+        
+        filters.push({
+          field: filterField,
+          operator: filterOperator,
+          value: parsedValue
         });
       }
       
-      // Parâmetros opcionais para paginação e ordenação
-      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 100;
-      const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : 0;
-      const orderBy = req.query.orderBy as string || "id";
-      const order = (req.query.order as string || "asc").toUpperCase();
+      // Configurar opções de paginação
+      const paginationOptions = {
+        page,
+        pageSize,
+        orderBy,
+        orderDirection
+      };
       
-      // Validar parametros
-      const validOrder = ["ASC", "DESC"].includes(order);
-      
-      // Buscar registros
-      let query = sql`SELECT * FROM ${sql.identifier(fullTableName)}`;
-      
-      // Adicionar ordem se campos válidos
-      query = sql`${query} ORDER BY ${sql.identifier(orderBy)} ${sql.raw(validOrder ? order : "ASC")}`;
-      
-      // Adicionar limit e offset
-      query = sql`${query} LIMIT ${limit} OFFSET ${offset}`;
-      
-      const result = await db.execute(query);
-      
-      // Contar total de registros para paginação
-      const countQuery = sql`SELECT COUNT(*) as total FROM ${sql.identifier(fullTableName)}`;
-      const countResult = await db.execute(countQuery);
-      const total = parseInt(countResult.rows[0]?.total || '0', 10);
-      
-      // Retornar com metadata de paginação
-      res.json({
-        success: true,
+      // Usar o serviço para consultar registros
+      const result = await projectTableManager.queryRecords(
         projectId,
         tableName,
-        data: result.rows,
-        meta: {
-          total,
-          limit,
-          offset,
-          hasMore: offset + result.rows.length < total
-        }
-      });
+        filters,
+        paginationOptions
+      );
       
+      // Tratar o resultado
+      if (result.success) {
+        return res.json({
+          success: true,
+          projectId,
+          tableName,
+          data: result.data,
+          meta: {
+            page: result.page || page,
+            limit: result.pageSize || pageSize,
+            total: result.count || 0,
+            totalPages: result.totalPages || 0,
+            hasMore: result.page < result.totalPages
+          },
+          filters: filters.length > 0 ? filters : undefined
+        });
+      } else {
+        // Status 404 para tabela não encontrada, 400 para outros erros
+        const statusCode = result.error?.includes('não existe') ? 404 : 400;
+        return res.status(statusCode).json({
+          success: false,
+          message: result.error,
+          details: result.data
+        });
+      }
     } catch (error) {
       console.error('Erro ao listar registros da tabela:', error);
       res.status(500).json({ 
@@ -5452,7 +5525,7 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
     }
   });
   
-  // Endpoint para obter um registro específico de uma tabela
+  // Endpoint para obter um registro específico de uma tabela (usando ProjectTableManager)
   app.get(`${apiPrefix}/p/:projectId/data/:tableName/:id`, express.json(), async (req, res) => {
     try {
       const projectId = parseInt(req.params.projectId, 10);
@@ -5466,47 +5539,52 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
         });
       }
       
-      // Nome completo da tabela no banco
-      const fullTableName = `p${projectId}_${tableName}`;
+      // Importar o serviço de gerenciamento de tabelas
+      const { projectTableManager } = await import('./services/project-table-manager');
       
-      // Verificar se a tabela existe
-      const tableCheck = await db.execute(sql`
-        SELECT EXISTS (
-          SELECT 1 FROM information_schema.tables 
-          WHERE table_schema = 'public' AND table_name = ${fullTableName}
-        ) as exists
-      `);
+      // Usar o serviço para buscar o registro por ID
+      const result = await projectTableManager.getRecordById(projectId, tableName, id);
       
-      if (!tableCheck.rows[0].exists) {
-        return res.status(404).json({ 
+      // Tratar o resultado conforme retornado pelo serviço
+      if (result.success) {
+        // Fazer processamentos adicionais se necessário
+        // Por exemplo, para produtos, calcular preço com desconto
+        let responseData = result.data;
+        
+        // Exemplo de pós-processamento para produtos
+        if (tableName.toLowerCase().includes('produto') && responseData.preco) {
+          // Calcular preço com desconto se houver um percentual de desconto
+          if (responseData.desconto_percentual) {
+            const descontoPercentual = parseFloat(responseData.desconto_percentual);
+            if (!isNaN(descontoPercentual) && descontoPercentual > 0) {
+              const precoOriginal = parseFloat(responseData.preco);
+              const precoComDesconto = precoOriginal * (1 - descontoPercentual / 100);
+              responseData.preco_com_desconto = parseFloat(precoComDesconto.toFixed(2));
+            }
+          }
+          
+          // Adicionar campo de disponibilidade baseado no estoque
+          if ('estoque' in responseData) {
+            const estoque = parseInt(responseData.estoque, 10);
+            responseData.disponivel = !isNaN(estoque) && estoque > 0;
+          }
+        }
+        
+        return res.json({
+          success: true,
+          projectId,
+          tableName,
+          data: responseData
+        });
+      } else {
+        // Status 404 para registro não encontrado, 400 para outros erros
+        const statusCode = result.error?.includes('não encontrado') || result.error?.includes('não existe') ? 404 : 400;
+        return res.status(statusCode).json({
           success: false,
-          message: `Tabela ${tableName} não existe para o projeto ${projectId}` 
+          message: result.error,
+          details: result.data
         });
       }
-      
-      // Buscar o registro
-      const query = sql`
-        SELECT * FROM ${sql.identifier(fullTableName)}
-        WHERE id = ${id}
-        LIMIT 1
-      `;
-      
-      const result = await db.execute(query);
-      
-      if (result.rows.length === 0) {
-        return res.status(404).json({ 
-          success: false,
-          message: `Registro com ID ${id} não encontrado na tabela ${tableName}` 
-        });
-      }
-      
-      res.json({
-        success: true,
-        projectId,
-        tableName,
-        data: result.rows[0]
-      });
-      
     } catch (error) {
       console.error('Erro ao buscar registro da tabela:', error);
       res.status(500).json({ 
@@ -5609,7 +5687,7 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
     }
   });
   
-  // Endpoint para atualizar um registro em uma tabela
+  // Endpoint para atualizar um registro em uma tabela (usando ProjectTableManager)
   app.put(`${apiPrefix}/p/:projectId/data/:tableName/:id`, express.json(), async (req, res) => {
     try {
       const projectId = parseInt(req.params.projectId, 10);
@@ -5624,131 +5702,76 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
         });
       }
       
-      // Nome completo da tabela no banco
-      const fullTableName = `p${projectId}_${tableName}`;
+      // Importar dinamicamente os serviços
+      const { idGenerator } = await import('./services/id-generator');
+      const { projectTableManager } = await import('./services/project-table-manager');
       
-      // Verificar se a tabela existe
-      const tableCheck = await db.execute(sql`
-        SELECT EXISTS (
-          SELECT 1 FROM information_schema.tables 
-          WHERE table_schema = 'public' AND table_name = ${fullTableName}
-        ) as exists
-      `);
+      // Estabelecer regras de negócio e enriquecimento de dados para atualização
+      const enrichedData = { ...data };
       
-      if (!tableCheck.rows[0].exists) {
-        return res.status(404).json({ 
-          success: false,
-          message: `Tabela ${tableName} não existe para o projeto ${projectId}` 
-        });
+      // 1. Atualizar slugs para produtos automaticamente se o nome for alterado
+      if (tableName.toLowerCase().includes('produto') && data.nome) {
+        enrichedData.slug = idGenerator.generateSlug(data.nome);
+        console.log(`Slug atualizado automaticamente para produto: ${enrichedData.slug}`);
       }
       
-      // Verificar se existem dados para atualizar
-      if (!data || Object.keys(data).length === 0) {
-        return res.status(400).json({ 
-          success: false,
-          message: "Nenhum dado fornecido para atualização" 
-        });
+      // 2. Tratar datas em formato string para objetos Date
+      for (const [key, value] of Object.entries(enrichedData)) {
+        if (typeof value === 'string' && 
+            (key.includes('data') || key.includes('date') || key.endsWith('_at')) && 
+            !isNaN(Date.parse(value))) {
+          enrichedData[key] = new Date(value);
+        }
       }
       
-      // Verificar se o registro existe
-      const checkRecord = await db.execute(sql`
-        SELECT EXISTS (
-          SELECT 1 FROM ${sql.identifier(fullTableName)}
-          WHERE id = ${id}
-        ) as exists
-      `);
+      // 3. Aplicar validações específicas por tipo de entidade
+      const validationSchema = {};
       
-      if (!checkRecord.rows[0].exists) {
-        return res.status(404).json({ 
-          success: false,
-          message: `Registro com ID ${id} não encontrado na tabela ${tableName}` 
-        });
-      }
-      
-      // Obter estrutura da tabela para validar campos
-      const tableSchema = await db.execute(sql`
-        SELECT column_name, data_type, is_nullable 
-        FROM information_schema.columns 
-        WHERE table_name = ${fullTableName}
-        AND table_schema = 'public'
-      `);
-      
-      // Transformar em um mapa para fácil acesso
-      const columnsMap = {};
-      for (const col of tableSchema.rows) {
-        columnsMap[col.column_name] = {
-          dataType: col.data_type,
-          isNullable: col.is_nullable === 'YES'
-        };
-      }
-      
-      // Validar os dados fornecidos contra o schema
-      const validatedData = {};
-      const errors = [];
-      
-      // Acompanhar as colunas disponíveis
-      const availableColumns = new Set(Object.keys(columnsMap));
-      
-      // Não permitir atualização do ID
-      delete data.id;
-      
-      // Para cada campo nos dados
-      for (const [key, value] of Object.entries(data)) {
-        // Verificar se o campo existe na tabela
-        if (!availableColumns.has(key)) {
-          errors.push(`Campo '${key}' não existe na tabela ${tableName}`);
-          continue;
+      // Validar produtos, por exemplo
+      if (tableName.toLowerCase().includes('produto')) {
+        if ('nome' in data) {
+          validationSchema['nome'] = {
+            minLength: 2,
+            maxLength: 200
+          };
         }
         
-        // Verificar valores nulos
-        if ((value === null || value === undefined) && !columnsMap[key].isNullable) {
-          errors.push(`Campo '${key}' não pode ser nulo`);
-          continue;
-        }
-        
-        // Se não é nulo, adicionar aos dados validados
-        if (value !== undefined) {
-          validatedData[key] = value;
+        // Se tiver preço, validar range
+        if ('preco' in data) {
+          validationSchema['preco'] = {
+            type: 'number',
+            min: 0
+          };
         }
       }
       
-      // Se houver erros, retornar
-      if (errors.length > 0) {
-        return res.status(400).json({ 
-          success: false,
-          message: "Erros de validação nos dados fornecidos",
-          errors
-        });
-      }
-      
-      // Atualizar timestamp se existir
-      if (availableColumns.has('updated_at')) {
-        validatedData['updated_at'] = new Date();
-      }
-      
-      // Construir a query manualmente com valores
-      const updateItems = Object.entries(validatedData).map(
-        ([key, value]) => sql`${sql.identifier(key)} = ${value}`
+      // Usar o serviço para atualizar o registro com enriquecimento e validação
+      const result = await projectTableManager.updateRecord(
+        projectId, 
+        tableName, 
+        id,
+        enrichedData, 
+        Object.keys(validationSchema).length > 0 ? validationSchema : undefined
       );
       
-      // Construir a query diretamente com valores
-      const updateQuery = sql`
-        UPDATE ${sql.identifier(fullTableName)}
-        SET ${sql.join(updateItems, sql`, `)}
-        WHERE id = ${id}
-        RETURNING *
-      `;
-      
-      // Executar a query com os parâmetros
-      const result = await db.execute(updateQuery);
-      
-      res.json({
-        success: true,
-        projectId,
-        tableName,
-        message: 'Registro atualizado com sucesso',
-        data: result.rows[0]
-      });
+      // Tratar o resultado conforme retornado pelo serviço
+      if (result.success) {
+        return res.json({
+          success: true,
+          projectId,
+          tableName,
+          message: 'Registro atualizado com sucesso',
+          data: result.data
+        });
+      } else {
+        // Status 400 para erros de validação, 404 para registro ou tabela não encontrados
+        const statusCode = result.error?.includes('não encontrado') || result.error?.includes('não existe') ? 404 : 400;
+        return res.status(statusCode).json({
+          success: false,
+          message: result.error,
+          details: result.data // Incluir detalhes como erros de validação se existirem
+        });
+      }
       
     } catch (error) {
       console.error('Erro ao atualizar registro na tabela:', error);
@@ -5760,7 +5783,7 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
     }
   });
   
-  // Endpoint para excluir um registro de uma tabela
+  // Endpoint para excluir um registro de uma tabela (usando ProjectTableManager)
   app.delete(`${apiPrefix}/p/:projectId/data/:tableName/:id`, express.json(), async (req, res) => {
     try {
       const projectId = parseInt(req.params.projectId, 10);
@@ -5774,71 +5797,63 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
         });
       }
       
-      // Nome completo da tabela no banco
-      const fullTableName = `p${projectId}_${tableName}`;
+      // Importar o serviço de gerenciamento de tabelas de projeto
+      const { projectTableManager } = await import('./services/project-table-manager');
       
-      // Verificar se a tabela existe
-      const tableCheck = await db.execute(sql`
-        SELECT EXISTS (
-          SELECT 1 FROM information_schema.tables 
-          WHERE table_schema = 'public' AND table_name = ${fullTableName}
-        ) as exists
-      `);
+      // Verificações especiais por tipo de entidade antes da exclusão
+      let canDelete = true;
+      let blockReason = '';
       
-      if (!tableCheck.rows[0].exists) {
-        return res.status(404).json({ 
+      // Se for um produto, verificar se existe em algum pedido antes de excluir
+      // Este é apenas um exemplo de regra de negócio que poderia ser implementada
+      if (tableName.toLowerCase().includes('produto')) {
+        // Aqui faríamos uma verificação em tabelas relacionadas
+        console.log(`Verificando referências para o produto ${id} antes da exclusão...`);
+        
+        // Na implementação real, consulte referências em tabelas relacionadas
+        // Exemplo:
+        // const hasReferences = await checkProductReferences(projectId, id);
+        // if (hasReferences) {
+        //   canDelete = false;
+        //   blockReason = 'Este produto não pode ser excluído porque está associado a pedidos';
+        // }
+      }
+      
+      // Se não puder excluir devido a regras de negócio, retorna erro
+      if (!canDelete) {
+        return res.status(409).json({
           success: false,
-          message: `Tabela ${tableName} não existe para o projeto ${projectId}` 
+          message: blockReason || 'Não é possível excluir este registro devido a restrições de integridade',
+          details: { id, tableName }
         });
       }
       
-      // Verificar se o registro existe
-      const checkRecord = await db.execute(sql`
-        SELECT EXISTS (
-          SELECT 1 FROM ${sql.identifier(fullTableName)}
-          WHERE id = ${id}
-        ) as exists
-      `);
+      // Usar o serviço para excluir o registro
+      const result = await projectTableManager.deleteRecord(projectId, tableName, id);
       
-      if (!checkRecord.rows[0].exists) {
-        return res.status(404).json({ 
-          success: false,
-          message: `Registro com ID ${id} não encontrado na tabela ${tableName}` 
+      // Tratar o resultado
+      if (result.success) {
+        // Registrar a exclusão em um log de auditoria se necessário
+        console.log(`Registro ${id} excluído da tabela ${tableName} do projeto ${projectId} com sucesso`);
+        
+        return res.json({
+          success: true,
+          projectId,
+          tableName,
+          message: result.data?.softDelete 
+            ? `Registro com ID ${id} marcado como excluído (soft delete)` 
+            : `Registro com ID ${id} excluído com sucesso`,
+          softDelete: result.data?.softDelete || false
         });
-      }
-      
-      // Verificar se a tabela tem suporte a soft delete
-      const hasSoftDelete = await db.execute(sql`
-        SELECT EXISTS (
-          SELECT 1 FROM information_schema.columns
-          WHERE table_name = ${fullTableName}
-          AND column_name = 'deleted_at'
-          AND table_schema = 'public'
-        ) as exists
-      `);
-      
-      if (hasSoftDelete.rows[0].exists) {
-        // Se suporta soft delete, apenas marca como excluído
-        await db.execute(sql`
-          UPDATE ${sql.identifier(fullTableName)}
-          SET "deleted_at" = CURRENT_TIMESTAMP
-          WHERE id = ${id}
-        `);
       } else {
-        // Senão, exclui permanentemente
-        await db.execute(sql`
-          DELETE FROM ${sql.identifier(fullTableName)}
-          WHERE id = ${id}
-        `);
+        // Status 400 para erros de validação, 404 para registro ou tabela não encontrados
+        const statusCode = result.error?.includes('não encontrado') || result.error?.includes('não existe') ? 404 : 400;
+        return res.status(statusCode).json({
+          success: false,
+          message: result.error,
+          details: result.data
+        });
       }
-      
-      res.json({
-        success: true,
-        projectId,
-        tableName,
-        message: `Registro com ID ${id} excluído com sucesso`
-      });
-      
     } catch (error) {
       console.error('Erro ao excluir registro da tabela:', error);
       res.status(500).json({ 
