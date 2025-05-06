@@ -82,7 +82,8 @@ export function DatabaseVisualizer({ projectId = 'default' }: DatabaseVisualizer
       const currentProjectId: string = resolvedId;
       
       console.log("Carregando tabelas para o projeto ID:", currentProjectId);
-      const response = await apiRequest('GET', `/api/database/tables?projectId=${currentProjectId}`);
+      // Usando a nova rota específica de projeto
+      const response = await apiRequest('GET', `/api/projects/${currentProjectId}/database/tables`);
       const data = await response.json();
       
       if (response.ok) {
