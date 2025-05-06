@@ -696,12 +696,18 @@ export const FormComponent = ({ element, isEditMode, onChange }: FormFieldProps)
     */
   };
   
-  // Função para adicionar um novo campo ao formulário (usado no modo de edição)
+  // Função melhorada para adicionar um novo campo ao formulário (usado no modo de edição)
+  // Garante que cada campo seja 100% independente com ID único
   const addFieldToForm = (fieldType: ElementTypes) => {
     if (!isEditMode) return;
     
-    // Determinar o tipo de campo a ser adicionado
+    // Gerar um ID único para o novo campo
+    const uniqueId = getUniqueId();
+    const timestamp = Date.now();
+    
+    // Configurações básicas para qualquer tipo de campo
     let newField: Partial<Element> = {
+      id: uniqueId,
       type: fieldType,
       parent: element.id, // Conecta o novo campo ao formulário pai
       x: 0, // Posições relativas dentro do formulário
@@ -711,29 +717,34 @@ export const FormComponent = ({ element, isEditMode, onChange }: FormFieldProps)
     };
     
     // Configurações específicas para cada tipo de campo
+    // Cada tipo tem seu próprio conjunto de atributos únicos
     switch(fieldType) {
       case ElementTypes.input:
         newField = {
           ...newField,
-          name: 'Campo de Texto',
+          name: `Campo de Texto ${timestamp}`,
           htmlAttributes: {
-            name: `campo_${Date.now()}`, // ID único baseado no timestamp
+            id: `input_${uniqueId}`,
+            name: `campo_${timestamp}`, // Nome único baseado no timestamp
             label: 'Novo Campo',
             placeholder: 'Digite aqui...',
-            'data-db-type': 'string'
+            'data-db-type': 'string',
+            'data-field-id': uniqueId // Armazena o ID do campo para rastreabilidade
           }
         };
         break;
       case ElementTypes.textarea:
         newField = {
           ...newField,
-          name: 'Área de Texto',
+          name: `Área de Texto ${timestamp}`,
           htmlAttributes: {
-            name: `area_${Date.now()}`,
+            id: `textarea_${uniqueId}`,
+            name: `area_${timestamp}`,
             label: 'Nova Área de Texto',
             placeholder: 'Digite um texto mais longo aqui...',
             rows: '4',
-            'data-db-type': 'text'
+            'data-db-type': 'text',
+            'data-field-id': uniqueId
           },
           height: 120
         };
@@ -741,27 +752,31 @@ export const FormComponent = ({ element, isEditMode, onChange }: FormFieldProps)
       case ElementTypes.select:
         newField = {
           ...newField,
-          name: 'Campo de Seleção',
+          name: `Campo de Seleção ${timestamp}`,
           htmlAttributes: {
-            name: `selecao_${Date.now()}`,
+            id: `select_${uniqueId}`,
+            name: `selecao_${timestamp}`,
             label: 'Nova Seleção',
             options: JSON.stringify([
               { value: '', label: 'Selecione uma opção' },
               { value: 'opcao1', label: 'Opção 1' },
               { value: 'opcao2', label: 'Opção 2' }
             ]),
-            'data-db-type': 'string'
+            'data-db-type': 'string',
+            'data-field-id': uniqueId
           }
         };
         break;
       case ElementTypes.checkbox:
         newField = {
           ...newField,
-          name: 'Campo de Checkbox',
+          name: `Campo de Checkbox ${timestamp}`,
           htmlAttributes: {
-            name: `checkbox_${Date.now()}`,
+            id: `checkbox_${uniqueId}`,
+            name: `checkbox_${timestamp}`,
             label: 'Novo Checkbox',
-            'data-db-type': 'boolean'
+            'data-db-type': 'boolean',
+            'data-field-id': uniqueId
           },
           height: 24,
           width: 24
@@ -770,10 +785,12 @@ export const FormComponent = ({ element, isEditMode, onChange }: FormFieldProps)
       case ElementTypes.button:
         newField = {
           ...newField,
-          name: 'Botão de Envio',
+          name: `Botão de Envio ${timestamp}`,
           content: 'Enviar',
           htmlAttributes: {
-            type: 'submit'
+            id: `button_${uniqueId}`,
+            type: 'submit',
+            'data-field-id': uniqueId
           },
           width: 120,
           height: 40,
@@ -789,19 +806,25 @@ export const FormComponent = ({ element, isEditMode, onChange }: FormFieldProps)
         break;
     }
     
-    // Adiciona o campo ao editor
-    const newFieldId = addElement(newField as Element);
+    // Adiciona o campo ao editor como um elemento completamente independente
+    const addedFieldId = addElement(newField as Element);
     
-    // Adiciona o campo como filho do formulário
-    if (element.children) {
-      updateElement(element.id, {
-        children: [...element.children, newFieldId]
-      });
-    } else {
-      updateElement(element.id, {
-        children: [newFieldId]
-      });
-    }
+    // Garante que o ID do campo adicionado seja usado como referência
+    const fieldId = addedFieldId || uniqueId;
+    
+    // Atualiza a lista de filhos do formulário
+    const updatedChildren = element.children ? [...element.children, fieldId] : [fieldId];
+    
+    // Atualiza o elemento do formulário com o novo campo filho
+    updateElement(element.id, {
+      children: updatedChildren
+    });
+    
+    // Atualiza a ordem dos campos
+    setFieldOrder(updatedChildren);
+    
+    // Retorna o ID do campo adicionado
+    return fieldId;
   };
   
   const formStyle = isEditMode ? {
@@ -919,11 +942,84 @@ export const FormComponent = ({ element, isEditMode, onChange }: FormFieldProps)
                 <div className="flex gap-2">
                   <button 
                     onClick={() => {
-                      // Adiciona campos básicos de exemplo
+                      // Criar campos independentes com IDs únicos
+                      // Primeiro campo: Nome
                       addFieldToForm(ElementTypes.input);
-                      setTimeout(() => addFieldToForm(ElementTypes.input), 100);
-                      setTimeout(() => addFieldToForm(ElementTypes.select), 200);
-                      setTimeout(() => addFieldToForm(ElementTypes.button), 300);
+                      
+                      // Segundo campo: Email
+                      setTimeout(() => {
+                        const emailField = {
+                          type: ElementTypes.input,
+                          parent: element.id,
+                          x: 0,
+                          y: 0,
+                          width: 300,
+                          height: 40,
+                          name: 'Campo de Email',
+                          htmlAttributes: {
+                            name: `email_${Date.now()}`,
+                            type: 'email',
+                            label: 'Email',
+                            placeholder: 'seu@email.com',
+                            required: 'true',
+                            'data-db-type': 'string'
+                          }
+                        };
+                        const newFieldId = addElement(emailField as Element);
+                        const updatedChildren = element.children ? [...element.children, newFieldId] : [newFieldId];
+                        updateElement(element.id, { children: updatedChildren });
+                      }, 100);
+                      
+                      // Terceiro campo: Mensagem (textarea)
+                      setTimeout(() => {
+                        const textareaField = {
+                          type: ElementTypes.textarea,
+                          parent: element.id,
+                          x: 0,
+                          y: 0,
+                          width: 300,
+                          height: 120,
+                          name: 'Campo de Mensagem',
+                          htmlAttributes: {
+                            name: `mensagem_${Date.now()}`,
+                            label: 'Mensagem',
+                            placeholder: 'Digite sua mensagem aqui...',
+                            rows: '4',
+                            'data-db-type': 'text'
+                          }
+                        };
+                        const newFieldId = addElement(textareaField as Element);
+                        const updatedChildren = element.children ? [...element.children, newFieldId] : [newFieldId];
+                        updateElement(element.id, { children: updatedChildren });
+                      }, 200);
+                      
+                      // Quarto campo: Botão de envio
+                      setTimeout(() => {
+                        const buttonField = {
+                          type: ElementTypes.button,
+                          parent: element.id,
+                          x: 0,
+                          y: 0,
+                          width: 120,
+                          height: 40,
+                          content: 'Enviar',
+                          name: 'Botão de Envio',
+                          htmlAttributes: {
+                            type: 'submit'
+                          },
+                          styles: {
+                            backgroundColor: '#3b82f6',
+                            color: 'white',
+                            padding: '8px 16px',
+                            borderRadius: '4px',
+                            fontWeight: '500',
+                            cursor: 'pointer'
+                          }
+                        };
+                        const newFieldId = addElement(buttonField as Element);
+                        const updatedChildren = element.children ? [...element.children, newFieldId] : [newFieldId];
+                        updateElement(element.id, { children: updatedChildren });
+                      }, 300);
                     }}
                     className="px-3 py-2 bg-primary text-primary-foreground text-sm rounded hover:bg-primary/90"
                     type="button"
