@@ -1441,6 +1441,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Rotas para banco de dados visual já implementadas abaixo
+  // Não registrando aqui para evitar duplicação
+
   // Payment integration routes
   if (stripeInstance) {
     app.post(`${apiPrefix}/create-payment-intent`, async (req, res) => {
