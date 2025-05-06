@@ -50,7 +50,7 @@ const ResizableElement = ({ element, isSelected, onClick }: ResizableElementProp
   // Render content based on element type
   const renderContent = () => {
     // Se o elemento tem HTML, CSS ou JS personalizado, aplicamos através de um iframe
-    if (element.htmlContent || element.cssContent || element.jsContent) {
+    if (element.customCode?.html || element.customCode?.css || element.customCode?.js) {
       const combinedHtml = `
         <!DOCTYPE html>
         <html>
@@ -67,15 +67,15 @@ const ResizableElement = ({ element, isSelected, onClick }: ResizableElementProp
               color: #333;
             }
             /* Estilos personalizados do elemento */
-            ${element.cssContent || ''}
+            ${element.customCode?.css || ''}
           </style>
         </head>
         <body>
-          ${element.htmlContent || element.content || '<div>Container</div>'}
+          ${element.customCode?.html || element.content || '<div>Container</div>'}
           <script>
             document.addEventListener('DOMContentLoaded', function() {
               try {
-                ${element.jsContent || ''}
+                ${element.customCode?.js || ''}
               } catch (e) {
                 console.error('Script error:', e);
               }
