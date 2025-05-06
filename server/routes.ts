@@ -5126,13 +5126,74 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
       contentType: req.headers['content-type']
     });
   });
+  
+  // Endpoint para teste direto de criação de tabela
+  app.post(`${apiPrefix}/test/create-table`, async (req, res) => {
+    try {
+      const tableName = 'test_table_' + Math.floor(Math.random() * 1000);
+      const columns = [
+        { name: "id", type: "serial", primary: true },
+        { name: "nome", type: "text", notNull: true },
+        { name: "valor", type: "integer", notNull: true, defaultValue: 0 }
+      ];
+      
+      console.log(`Criando tabela de teste: ${tableName}`);
+      
+      // Construir a cláusula de criação de tabela
+      let columnsDefinition = columns.map(col => {
+        let def = `"${col.name}" ${mapTypeToSQL(col.type)}`;
+        
+        if (col.primary) {
+          def += " PRIMARY KEY";
+        }
+        
+        if (col.notNull) {
+          def += " NOT NULL";
+        }
+        
+        if (col.defaultValue !== undefined) {
+          def += ` DEFAULT ${formatSQLValue(col.defaultValue, col.type)}`;
+        }
+        
+        return def;
+      }).join(', ');
+      
+      columnsDefinition += `, "created_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "updated_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`;
+      
+      console.log(`SQL: CREATE TABLE "${tableName}" (${columnsDefinition})`);
+      
+      // Criar a tabela
+      const createTableQuery = sql.raw(`CREATE TABLE "${tableName}" (${columnsDefinition})`);
+      await db.execute(createTableQuery);
+      
+      console.log('Tabela de teste criada com sucesso:', tableName);
+      
+      // Responder com sucesso
+      res.status(201).json({
+        success: true,
+        message: `Tabela ${tableName} criada com sucesso`,
+        tableName,
+        columns: columns.map(col => col.name)
+      });
+      
+    } catch (error) {
+      console.error('Erro ao criar tabela de teste:', error);
+      res.status(500).json({ message: 'Erro ao criar tabela de teste' });
+    }
+  });
 
   // Nova implementação direta para criar tabela vinculada a um projeto
   app.post(`${apiPrefix}/projects/:projectId/database/tables`, async (req, res) => {
     try {
+      console.log('====================================================');
       console.log('Endpoint de criação de tabela para projeto específico');
-      console.log('Corpo da requisição BRUTO:', req.body);
-      console.log('Corpo da requisição JSON:', JSON.stringify(req.body));
+      console.log('Corpo da requisição BRUTO:', JSON.stringify(req.body));
+      console.log('typeof req.body:', typeof req.body);
+      console.log('body é objeto:', req.body === Object(req.body));
+      console.log('keys:', Object.keys(req.body || {}));
+      console.log('Headers completos:', req.headers);
+      console.log('Content-Type:', req.headers['content-type']);
+      console.log('Content-Length:', req.headers['content-length']);
       
       // Extrair dados da requisição
       const projectId = parseInt(req.params.projectId, 10);
