@@ -378,7 +378,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Project routes
-  app.get(`${apiPrefix}/projects`, async (req, res) => {
+  // Endpoint para buscar um projeto pelo nome
+app.get(`${apiPrefix}/projects/by-name/:name`, async (req, res) => {
+  try {
+    const projectName = req.params.name;
+    
+    if (projectName === 'default') {
+      // Caso especial para o projeto "default" - retorna o projeto mais recente do usuário
+      if (!req.session?.userId) {
+        return res.status(401).json({ message: "Usuário não autenticado" });
+      }
+      
+      const userProjects = await storage.getProjectsByUserId(req.session.userId);
+      
+      if (userProjects && userProjects.length > 0) {
+        // Retorna o projeto mais recente
+        console.log(`Projeto encontrado para o nome '${projectName}'`, userProjects[0]);
+        return res.status(200).json(userProjects[0]);
+      } else {
+        return res.status(404).json({ message: "Nenhum projeto encontrado para o usuário" });
+      }
+    }
+    
+    // Busca projeto pelo nome
+    const projects = await db.query.projects.findMany({
+      where: eq(schema.projects.name, projectName),
+      limit: 1
+    });
+    
+    if (projects.length === 0) {
+      return res.status(404).json({ message: `Projeto com nome '${projectName}' não encontrado` });
+    }
+    
+    console.log(`Projeto encontrado para o nome '${projectName}'`, projects[0]);
+    res.status(200).json(projects[0]);
+  } catch (error) {
+    console.error("Erro ao buscar projeto por nome:", error);
+    res.status(500).json({ message: "Erro ao buscar projeto por nome" });
+  }
+});
+
+app.get(`${apiPrefix}/projects`, async (req, res) => {
     try {
       // Verificar autenticação via session ou pelo middleware auth
       const userId = req.session?.userId || (req.user ? req.user.id : null);
@@ -4305,11 +4345,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Endpoint para criar uma nova tabela no banco de dados
   app.post(`${apiPrefix}/database/tables`, handleCreateDatabaseTable);
   
-  // Rota específica para pegar tabelas por projeto
+  // Rotas específicas para tabelas por projeto
   app.get(`${apiPrefix}/projects/:projectId/database/tables`, (req, res) => {
     // Passar o ID do projeto via query para reutilizar o handler existente
     req.query.projectId = req.params.projectId;
     handleGetDatabaseTables(req, res);
+  });
+  
+  // Rota para criar tabela dentro de um projeto específico
+  app.post(`${apiPrefix}/projects/:projectId/database/tables`, (req, res) => {
+    // Inserir o ID do projeto dos parâmetros no corpo da requisição
+    req.body.projectId = req.params.projectId;
+    handleCreateDatabaseTable(req, res);
   });
   
   // ============= APIS DINÂMICAS E GERENCIAMENTO =============

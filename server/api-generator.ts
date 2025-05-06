@@ -1,12 +1,3 @@
-import { Request, Response } from 'express';
-import { db } from '../db';
-import * as schema from '../shared/schema';
-import { eq, and, or, like, desc, asc } from 'drizzle-orm';
-import { SQL } from 'drizzle-orm';
-import { pgTable, serial, text, integer, timestamp, boolean, jsonb, numeric } from 'drizzle-orm/pg-core';
-import { z } from 'zod';
-import { createInsertSchema, createSelectSchema } from 'drizzle-zod';
-
 /**
  * API Generator
  * 
@@ -20,6 +11,16 @@ import { createInsertSchema, createSelectSchema } from 'drizzle-zod';
  * - Relacionamentos entre tabelas
  */
 
+import { Request, Response } from 'express';
+import { db } from '@db';
+import { pool } from '@db';
+import { z } from 'zod';
+import { SQL, eq, and, sql, asc, desc } from 'drizzle-orm';
+import { projectApis, projectDatabases } from '@shared/schema';
+import { ApiFilter, ApiParameterRule, ApiOperationType, FilterOperator } from '@shared/api-schema-validation';
+import { validateTableBelongsToProject, parseProjectTableName } from '@shared/project-database-association';
+
+// Interface para endpoints de API
 export interface APIEndpoint {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: string;
@@ -29,6 +30,7 @@ export interface APIEndpoint {
   implementation: (req: Request, res: Response) => Promise<void>;
 }
 
+// Parâmetros aceitos pelos endpoints
 interface APIParameter {
   name: string;
   description: string;
@@ -38,6 +40,7 @@ interface APIParameter {
   schema?: any;
 }
 
+// Definição de tabela para geração de API
 export interface TableDefinition {
   name: string;
   description?: string;
@@ -50,6 +53,7 @@ export interface TableDefinition {
   softDelete?: boolean; // Se true, adiciona deletedAt (soft delete)
 }
 
+// Definição de coluna para geração de tabela
 interface ColumnDefinition {
   name: string;
   type: 'string' | 'integer' | 'number' | 'boolean' | 'json' | 'date' | 'reference';
@@ -69,6 +73,7 @@ interface ColumnDefinition {
   validation?: any; // Validação específica para este campo
 }
 
+// Definição de relacionamento entre tabelas
 interface RelationshipDefinition {
   type: 'oneToMany' | 'manyToOne' | 'oneToOne' | 'manyToMany';
   sourceColumn: string;
@@ -77,7 +82,7 @@ interface RelationshipDefinition {
   joinTable?: string; // Para relacionamentos many-to-many
 }
 
-// Cache de tabelas e endpoints já gerados
+// Cache de APIs para otimizar o desempenho
 interface APICache {
   tables: Map<string, any>; // PgTable objetos
   schemas: Map<string, {
@@ -87,56 +92,91 @@ interface APICache {
   endpoints: APIEndpoint[];
 }
 
+// Inicialização do cache de API
 const apiCache: APICache = {
   tables: new Map(),
   schemas: new Map(),
   endpoints: []
 };
 
+// Funções mapeadoras entre tipos
+const typeMappers = {
+  sqlToJs: (sqlType: string): string => {
+    // Esta função mapeia tipos SQL para tipos JavaScript
+    const mappings: Record<string, string> = {
+      'INTEGER': 'number',
+      'SERIAL': 'number',
+      'BIGINT': 'number',
+      'NUMERIC': 'number',
+      'REAL': 'number',
+      'DOUBLE PRECISION': 'number',
+      'TEXT': 'string',
+      'VARCHAR': 'string',
+      'CHAR': 'string',
+      'UUID': 'string',
+      'BOOLEAN': 'boolean',
+      'JSONB': 'object',
+      'JSON': 'object',
+      'DATE': 'string', // ou Date no frontend
+      'TIMESTAMP': 'string', // ou Date no frontend
+      'TIME': 'string'
+    };
+    
+    // Normalizando para uppercase e removendo parâmetros
+    const normalizedType = sqlType.toUpperCase().split('(')[0].trim();
+    return mappings[normalizedType] || 'string'; // default é string
+  },
+  
+  jsToZod: (jsType: string): z.ZodTypeAny => {
+    // Esta função mapeia tipos JavaScript para tipos Zod
+    const mappings: Record<string, () => z.ZodTypeAny> = {
+      'number': () => z.number(),
+      'string': () => z.string(),
+      'boolean': () => z.boolean(),
+      'object': () => z.object({}).passthrough(), // permitindo qualquer objeto
+      'array': () => z.array(z.any())
+    };
+    
+    return mappings[jsType] ? mappings[jsType]() : z.any(); // default é any
+  }
+};
+
 /**
  * Registra todas as APIs geradas no Express
  */
 export function registerGeneratedAPIs(app: any, basePath: string = '/api') {
-  for (const endpoint of apiCache.endpoints) {
-    const path = `${basePath}${endpoint.path}`;
+  // Registra todos os endpoints cacheados
+  apiCache.endpoints.forEach(endpoint => {
+    const method = endpoint.method.toLowerCase();
+    const fullPath = `${basePath}${endpoint.path}`;
     
-    switch (endpoint.method) {
-      case 'GET':
-        app.get(path, asyncHandler(endpoint.implementation));
-        break;
-      case 'POST':
-        app.post(path, asyncHandler(endpoint.implementation));
-        break;
-      case 'PUT':
-        app.put(path, asyncHandler(endpoint.implementation));
-        break;
-      case 'PATCH':
-        app.patch(path, asyncHandler(endpoint.implementation));
-        break;
-      case 'DELETE':
-        app.delete(path, asyncHandler(endpoint.implementation));
-        break;
+    // Se o método existir no app, registre a rota
+    if (app[method]) {
+      app[method](fullPath, asyncHandler(endpoint.implementation));
+      console.log(`API registrada: ${endpoint.method} ${fullPath}`);
+    } else {
+      console.error(`Método HTTP '${method}' não suportado ao registrar ${fullPath}`);
     }
-    
-    console.log(`API registrada: ${endpoint.method} ${path} - ${endpoint.description}`);
-  }
+  });
 }
 
-// Wrapper para manipulação de erros em rotas assíncronas
+// Utilitário para transformar handlers assíncronos em handlers Express padrão
 function asyncHandler(fn: (req: Request, res: Response) => Promise<void>) {
   return async (req: Request, res: Response) => {
     try {
       await fn(req, res);
     } catch (error) {
-      console.error('Erro na API:', error);
-      const statusCode = error instanceof APIError ? error.statusCode : 500;
-      const message = error instanceof Error ? error.message : 'Erro interno do servidor';
-      res.status(statusCode).json({ error: message });
+      console.error('Erro em API gerada:', error);
+      if (error instanceof APIError) {
+        res.status(error.statusCode).json({ error: error.message });
+      } else {
+        res.status(500).json({ error: 'Erro interno no servidor' });
+      }
     }
   };
 }
 
-// Classe customizada para erros de API
+// Classe de erro personalizada para APIs geradas
 class APIError extends Error {
   statusCode: number;
   
@@ -151,224 +191,144 @@ class APIError extends Error {
  * Gera as definições de tabela do Drizzle a partir de nossas configurações
  */
 export async function generateTableDefinition(tableDef: TableDefinition): Promise<any> {
-  // Se já existe no cache, retorna
-  if (apiCache.tables.has(tableDef.tableName)) {
-    return apiCache.tables.get(tableDef.tableName);
-  }
-  
-  // Construir as colunas da tabela
-  const columns: Record<string, any> = {};
-  
-  // ID sempre presente como chave primária
-  columns.id = serial('id').primaryKey();
-  
-  // Adicionar todas as colunas definidas
-  for (const column of tableDef.columns) {
-    switch (column.type) {
-      case 'string':
-        columns[column.name] = column.required 
-          ? text(column.name).notNull() 
-          : text(column.name);
-        break;
-      case 'integer':
-        columns[column.name] = column.required 
-          ? integer(column.name).notNull() 
-          : integer(column.name);
-        break;
-      case 'number':
-        columns[column.name] = column.required 
-          ? numeric(column.name).notNull() 
-          : numeric(column.name);
-        break;
-      case 'boolean':
-        columns[column.name] = column.required 
-          ? boolean(column.name).notNull() 
-          : boolean(column.name);
-        break;
-      case 'json':
-        columns[column.name] = column.required 
-          ? jsonb(column.name).notNull() 
-          : jsonb(column.name);
-        break;
-      case 'date':
-        columns[column.name] = column.required 
-          ? timestamp(column.name).notNull() 
-          : timestamp(column.name);
-        break;
-      case 'reference':
-        if (column.reference) {
-          // Certificar que a tabela referenciada existe
-          if (!apiCache.tables.has(column.reference.table)) {
-            throw new Error(`Tabela referenciada ${column.reference.table} não existe no cache.`);
-          }
-          
-          // Buscar tabela referenciada do cache
-          const refTable = apiCache.tables.get(column.reference.table);
-          
-          columns[column.name] = column.required 
-            ? integer(column.name).references(() => refTable[column.reference.column]).notNull() 
-            : integer(column.name).references(() => refTable[column.reference.column]);
-        }
-        break;
-    }
-    
-    // Adicionar unique se necessário
-    if (column.unique && columns[column.name]) {
-      columns[column.name] = columns[column.name].unique();
-    }
-  }
-  
-  // Adicionar timestamps se solicitado
-  if (tableDef.timestamps !== false) { // Por padrão, adiciona timestamps
-    columns.createdAt = timestamp('created_at').defaultNow().notNull();
-    columns.updatedAt = timestamp('updated_at').defaultNow().notNull();
-  }
-  
-  // Adicionar soft delete se solicitado
-  if (tableDef.softDelete) {
-    columns.deletedAt = timestamp('deleted_at');
-  }
-  
-  // Criar a definição da tabela
-  const table = pgTable(tableDef.tableName, columns);
-  
-  // Armazenar no cache
-  apiCache.tables.set(tableDef.tableName, table);
-  
-  // Criar os esquemas de validação
-  const insertSchema = createInsertSchema(table);
-  const selectSchema = createSelectSchema(table);
-  
-  // Armazenar esquemas no cache
-  apiCache.schemas.set(tableDef.tableName, {
-    insertSchema,
-    selectSchema
-  });
-  
-  // Se solicitado, gerar endpoints CRUD padrão
-  if (tableDef.apiEndpoints) {
-    generateCRUDEndpoints(tableDef, table);
-  }
-  
-  // Adicionar endpoints personalizados se existirem
-  if (tableDef.customEndpoints) {
-    apiCache.endpoints.push(...tableDef.customEndpoints);
-  }
-  
-  return table;
+  // Essa função seria usada para gerar definições de tabela programaticamente
+  // Como estamos usando SQL direto para criar tabelas, não precisamos implementar isso
+  // Mas poderia ser útil no futuro para gerar schemas TypeScript a partir das definições
+  return null;
 }
 
 /**
  * Gera endpoints CRUD padrão para uma tabela
  */
 function generateCRUDEndpoints(tableDef: TableDefinition, table: any) {
-  const tableName = tableDef.tableName;
-  const basePath = `/${tableName}`;
-  const schemas = apiCache.schemas.get(tableName);
+  const endpoints: APIEndpoint[] = [];
+  const { name, tableName, description } = tableDef;
+  const { projectId } = parseProjectTableName(tableName);
   
-  if (!schemas) {
-    throw new Error(`Esquemas para tabela ${tableName} não encontrados.`);
-  }
-  
-  // 1. Endpoint GET - Listar todos (com paginação e filtros)
+  // Endpoint para listar todos os registros (GET /api/projects/:projectId/:resource)
   const listEndpoint: APIEndpoint = {
     method: 'GET',
-    path: basePath,
-    description: `Lista todos os registros de ${tableDef.name}`,
+    path: `/projects/${projectId}/${name.toLowerCase()}`,
+    description: `Lista todos os registros de ${name}`,
     parameters: [
       {
         name: 'page',
-        description: 'Número da página',
+        description: 'Página dos resultados (começando em 1)',
         in: 'query',
         required: false,
         type: 'integer'
       },
       {
         name: 'limit',
-        description: 'Número de itens por página',
+        description: 'Número de registros por página',
         in: 'query',
         required: false,
         type: 'integer'
       },
       {
-        name: 'sort',
+        name: 'sortBy',
         description: 'Campo para ordenação',
         in: 'query',
         required: false,
         type: 'string'
       },
       {
-        name: 'order',
-        description: 'Direção da ordenação (asc/desc)',
+        name: 'sortOrder',
+        description: 'Direção da ordenação (asc ou desc)',
         in: 'query',
         required: false,
         type: 'string'
       }
     ],
-    responseSchema: z.object({
-      data: z.array(schemas.selectSchema),
-      pagination: z.object({
-        total: z.number(),
-        page: z.number(),
-        limit: z.number(),
-        pages: z.number()
-      })
-    }),
-    implementation: async (req: Request, res: Response) => {
-      const page = Number(req.query.page) || 1;
-      const limit = Math.min(Number(req.query.limit) || 20, 100); // Máximo de 100 itens por página
-      const offset = (page - 1) * limit;
-      const sortField = String(req.query.sort || 'id');
-      const sortOrder = req.query.order === 'desc' ? 'desc' : 'asc';
-      
-      // Para soft delete, filtrar apenas itens não deletados
-      const whereClause = tableDef.softDelete ? [{ deletedAt: null }] : [];
-      
-      // Construir filtros dinâmicos a partir de query params
-      // Excluir parâmetros especiais (page, limit, sort, order)
-      const specialParams = ['page', 'limit', 'sort', 'order'];
-      for (const [key, value] of Object.entries(req.query)) {
-        if (!specialParams.includes(key) && table[key] && value) {
-          // Se o tipo da coluna for string, usar LIKE para busca parcial
-          if (tableDef.columns.find(c => c.name === key)?.type === 'string') {
-            whereClause.push(like(table[key], `%${value}%`));
-          } else {
-            whereClause.push(eq(table[key], value));
+    responseSchema: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'array',
+          items: {
+            type: 'object',
+            description: `Item de ${name}`
+          }
+        },
+        meta: {
+          type: 'object',
+          properties: {
+            pagination: {
+              type: 'object',
+              properties: {
+                page: { type: 'integer' },
+                limit: { type: 'integer' },
+                total: { type: 'integer' },
+                totalPages: { type: 'integer' }
+              }
+            }
           }
         }
       }
-      
-      // Contar total de registros para paginação
-      const countResult = await db.select({ count: count() }).from(table)
-        .where(and(...whereClause));
-      const total = Number(countResult[0].count);
-      
-      // Buscar registros com paginação e ordenação
-      const orderBy: any = sortOrder === 'desc' ? desc(table[sortField]) : asc(table[sortField]);
-      
-      const data = await db.select().from(table)
-        .where(and(...whereClause))
-        .limit(limit)
-        .offset(offset)
-        .orderBy(orderBy);
-      
-      res.json({
-        data,
-        pagination: {
-          total,
-          page,
-          limit,
-          pages: Math.ceil(total / limit)
+    },
+    implementation: async (req: Request, res: Response) => {
+      try {
+        // Extrai e valida parâmetros da query
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 10;
+        const sortBy = (req.query.sortBy as string) || 'id';
+        const sortOrder = (req.query.sortOrder as string || 'asc').toLowerCase();
+        
+        // Validação para evitar SQL injection em campos de ordenação
+        const validColumns = tableDef.columns.map(col => col.name);
+        if (!validColumns.includes(sortBy)) {
+          throw new APIError(`Campo de ordenação inválido: ${sortBy}`, 400);
         }
-      });
+        
+        // Prepara query SQL segura com parameterização
+        const offset = (page - 1) * limit;
+        
+        // Cria a consulta SQL para os dados
+        const dataQuery = sql`
+          SELECT * FROM ${sql.identifier(tableName)}
+          ORDER BY ${sql.identifier(sortBy)} ${sortOrder === 'desc' ? sql`DESC` : sql`ASC`}
+          LIMIT ${limit} OFFSET ${offset}
+        `;
+        
+        // Cria a consulta SQL para contar o total
+        const countQuery = sql`SELECT COUNT(*) as total FROM ${sql.identifier(tableName)}`;
+        
+        // Executa as consultas
+        const dataResult = await db.execute(dataQuery);
+        const countResult = await db.execute(countQuery);
+        
+        // Calcula informações de paginação
+        const total = parseInt(countResult.rows[0]?.total || '0', 10);
+        const totalPages = Math.ceil(total / limit);
+        
+        // Retorna os resultados formatados
+        res.json({
+          data: dataResult.rows,
+          meta: {
+            pagination: {
+              page,
+              limit,
+              total,
+              totalPages
+            }
+          }
+        });
+      } catch (error) {
+        console.error(`Erro ao listar registros de ${tableName}:`, error);
+        if (error instanceof APIError) {
+          res.status(error.statusCode).json({ error: error.message });
+        } else {
+          res.status(500).json({ error: 'Erro ao processar a solicitação' });
+        }
+      }
     }
   };
   
-  // 2. Endpoint GET - Obter por ID
+  // Endpoint para buscar um registro pelo ID (GET /api/projects/:projectId/:resource/:id)
   const getByIdEndpoint: APIEndpoint = {
     method: 'GET',
-    path: `${basePath}/:id`,
-    description: `Obtém um registro de ${tableDef.name} por ID`,
+    path: `/projects/${projectId}/${name.toLowerCase()}/:id`,
+    description: `Busca um registro de ${name} pelo ID`,
     parameters: [
       {
         name: 'id',
@@ -378,64 +338,117 @@ function generateCRUDEndpoints(tableDef: TableDefinition, table: any) {
         type: 'integer'
       }
     ],
-    responseSchema: schemas.selectSchema,
+    responseSchema: {
+      type: 'object',
+      description: `Item de ${name}`
+    },
     implementation: async (req: Request, res: Response) => {
-      const id = Number(req.params.id);
-      
-      if (isNaN(id)) {
-        throw new APIError('ID inválido', 400);
+      try {
+        const id = parseInt(req.params.id);
+        
+        if (isNaN(id)) {
+          throw new APIError('ID inválido', 400);
+        }
+        
+        // Busca o registro pelo ID
+        const query = sql`
+          SELECT * FROM ${sql.identifier(tableName)}
+          WHERE id = ${id}
+        `;
+        
+        const result = await db.execute(query);
+        
+        if (!result.rows.length) {
+          throw new APIError('Registro não encontrado', 404);
+        }
+        
+        res.json(result.rows[0]);
+      } catch (error) {
+        console.error(`Erro ao buscar registro de ${tableName}:`, error);
+        if (error instanceof APIError) {
+          res.status(error.statusCode).json({ error: error.message });
+        } else {
+          res.status(500).json({ error: 'Erro ao processar a solicitação' });
+        }
       }
-      
-      // Para soft delete, verificar se o item foi deletado
-      const whereClause = [eq(table.id, id)];
-      if (tableDef.softDelete) {
-        whereClause.push(eq(table.deletedAt, null));
-      }
-      
-      const result = await db.select().from(table)
-        .where(and(...whereClause))
-        .limit(1);
-      
-      if (result.length === 0) {
-        throw new APIError('Registro não encontrado', 404);
-      }
-      
-      res.json(result[0]);
     }
   };
   
-  // 3. Endpoint POST - Criar
+  // Endpoint para criar um novo registro (POST /api/projects/:projectId/:resource)
   const createEndpoint: APIEndpoint = {
     method: 'POST',
-    path: basePath,
-    description: `Cria um novo registro de ${tableDef.name}`,
+    path: `/projects/${projectId}/${name.toLowerCase()}`,
+    description: `Cria um novo registro de ${name}`,
     parameters: [
       {
         name: 'body',
         description: 'Dados do registro',
         in: 'body',
         required: true,
-        type: 'object',
-        schema: schemas.insertSchema
+        type: 'object'
       }
     ],
-    responseSchema: schemas.selectSchema,
+    responseSchema: {
+      type: 'object',
+      description: `Item de ${name} criado`
+    },
     implementation: async (req: Request, res: Response) => {
-      // Validar dados com o esquema
-      const validatedData = schemas.insertSchema.parse(req.body);
-      
-      // Inserir no banco
-      const result = await db.insert(table).values(validatedData).returning();
-      
-      res.status(201).json(result[0]);
+      try {
+        // Prepara as colunas e valores
+        const columnNames: string[] = [];
+        const placeholders: string[] = [];
+        const values: any[] = [];
+        let paramIndex = 1;
+        
+        // Processa cada campo do corpo da requisição
+        for (const [field, value] of Object.entries(req.body)) {
+          // Verifica se o campo existe na definição de tabela
+          const columnDef = tableDef.columns.find(c => c.name === field);
+          if (!columnDef) continue; // Ignora campos que não estão na definição
+          
+          // Adiciona o campo e o placeholder
+          columnNames.push(field);
+          placeholders.push(`$${paramIndex}`);
+          values.push(value);
+          paramIndex++;
+        }
+        
+        // Adiciona campos de timestamp se necessário
+        if (tableDef.timestamps) {
+          const now = new Date();
+          columnNames.push('created_at', 'updated_at');
+          placeholders.push(`$${paramIndex}`, `$${paramIndex + 1}`);
+          values.push(now, now);
+        }
+        
+        // Cria a query SQL
+        const query = `
+          INSERT INTO ${tableName} (${columnNames.join(', ')})
+          VALUES (${placeholders.join(', ')})
+          RETURNING *
+        `;
+        
+        // Executa a query
+        const result = await pool.query(query, values);
+        
+        // Retorna o registro criado
+        res.status(201).json(result.rows[0]);
+      } catch (error) {
+        console.error(`Erro ao criar registro em ${tableName}:`, error);
+        if (error instanceof APIError) {
+          res.status(error.statusCode).json({ error: error.message });
+        } else {
+          res.status(500).json({ error: 'Erro ao processar a solicitação' });
+        }
+      }
     }
   };
   
-  // 4. Endpoint PUT - Atualizar
+  // Endpoint para atualizar um registro (PUT /api/projects/:projectId/:resource/:id)
   const updateEndpoint: APIEndpoint = {
     method: 'PUT',
-    path: `${basePath}/:id`,
-    description: `Atualiza um registro de ${tableDef.name}`,
+    path: `/projects/${projectId}/${name.toLowerCase()}/:id`,
+    description: `Atualiza um registro de ${name}`,
     parameters: [
       {
         name: 'id',
@@ -446,59 +459,84 @@ function generateCRUDEndpoints(tableDef: TableDefinition, table: any) {
       },
       {
         name: 'body',
-        description: 'Dados atualizados do registro',
+        description: 'Dados do registro',
         in: 'body',
         required: true,
-        type: 'object',
-        schema: schemas.insertSchema
+        type: 'object'
       }
     ],
-    responseSchema: schemas.selectSchema,
+    responseSchema: {
+      type: 'object',
+      description: `Item de ${name} atualizado`
+    },
     implementation: async (req: Request, res: Response) => {
-      const id = Number(req.params.id);
-      
-      if (isNaN(id)) {
-        throw new APIError('ID inválido', 400);
+      try {
+        const id = parseInt(req.params.id);
+        
+        if (isNaN(id)) {
+          throw new APIError('ID inválido', 400);
+        }
+        
+        // Prepara os campos a serem atualizados
+        const updates: string[] = [];
+        const values: any[] = [];
+        let paramIndex = 1;
+        
+        // Processa cada campo do corpo da requisição
+        for (const [field, value] of Object.entries(req.body)) {
+          // Verifica se o campo existe na definição de tabela
+          const columnDef = tableDef.columns.find(c => c.name === field);
+          if (!columnDef) continue; // Ignora campos que não estão na definição
+          
+          // Adiciona o campo e o placeholder
+          updates.push(`${field} = $${paramIndex}`);
+          values.push(value);
+          paramIndex++;
+        }
+        
+        // Adiciona campo updated_at se necessário
+        if (tableDef.timestamps) {
+          updates.push(`updated_at = $${paramIndex}`);
+          values.push(new Date());
+          paramIndex++;
+        }
+        
+        // Adiciona condição WHERE
+        values.push(id);
+        
+        // Cria a query SQL
+        const query = `
+          UPDATE ${tableName}
+          SET ${updates.join(', ')}
+          WHERE id = $${paramIndex}
+          RETURNING *
+        `;
+        
+        // Executa a query
+        const result = await pool.query(query, values);
+        
+        if (!result.rows.length) {
+          throw new APIError('Registro não encontrado', 404);
+        }
+        
+        // Retorna o registro atualizado
+        res.json(result.rows[0]);
+      } catch (error) {
+        console.error(`Erro ao atualizar registro em ${tableName}:`, error);
+        if (error instanceof APIError) {
+          res.status(error.statusCode).json({ error: error.message });
+        } else {
+          res.status(500).json({ error: 'Erro ao processar a solicitação' });
+        }
       }
-      
-      // Validar dados com o esquema
-      const validatedData = schemas.insertSchema.parse(req.body);
-      
-      // Para soft delete, verificar se o item existe e não foi deletado
-      const whereClause = [eq(table.id, id)];
-      if (tableDef.softDelete) {
-        whereClause.push(eq(table.deletedAt, null));
-      }
-      
-      // Verificar se o registro existe
-      const existingRecord = await db.select({ id: table.id }).from(table)
-        .where(and(...whereClause))
-        .limit(1);
-      
-      if (existingRecord.length === 0) {
-        throw new APIError('Registro não encontrado', 404);
-      }
-      
-      // Atualizar o registro
-      const updateData = { ...validatedData };
-      if (tableDef.timestamps !== false) {
-        updateData.updatedAt = new Date();
-      }
-      
-      const result = await db.update(table)
-        .set(updateData)
-        .where(eq(table.id, id))
-        .returning();
-      
-      res.json(result[0]);
     }
   };
   
-  // 5. Endpoint DELETE - Excluir (ou soft delete)
+  // Endpoint para excluir um registro (DELETE /api/projects/:projectId/:resource/:id)
   const deleteEndpoint: APIEndpoint = {
     method: 'DELETE',
-    path: `${basePath}/:id`,
-    description: `Remove um registro de ${tableDef.name}`,
+    path: `/projects/${projectId}/${name.toLowerCase()}/:id`,
+    description: `Remove um registro de ${name}`,
     parameters: [
       {
         name: 'id',
@@ -508,67 +546,88 @@ function generateCRUDEndpoints(tableDef: TableDefinition, table: any) {
         type: 'integer'
       }
     ],
-    responseSchema: z.object({
-      success: z.boolean(),
-      message: z.string()
-    }),
+    responseSchema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        message: { type: 'string' }
+      }
+    },
     implementation: async (req: Request, res: Response) => {
-      const id = Number(req.params.id);
-      
-      if (isNaN(id)) {
-        throw new APIError('ID inválido', 400);
+      try {
+        const id = parseInt(req.params.id);
+        
+        if (isNaN(id)) {
+          throw new APIError('ID inválido', 400);
+        }
+        
+        // Verifica se é soft delete
+        if (tableDef.softDelete) {
+          // Soft delete (atualiza o campo deleted_at)
+          const query = `
+            UPDATE ${tableName}
+            SET deleted_at = $1
+            WHERE id = $2
+            RETURNING id
+          `;
+          
+          const result = await pool.query(query, [new Date(), id]);
+          
+          if (!result.rows.length) {
+            throw new APIError('Registro não encontrado', 404);
+          }
+          
+          res.json({
+            success: true,
+            message: 'Registro marcado como excluído'
+          });
+        } else {
+          // Hard delete (remove o registro)
+          const query = `
+            DELETE FROM ${tableName}
+            WHERE id = $1
+            RETURNING id
+          `;
+          
+          const result = await pool.query(query, [id]);
+          
+          if (!result.rows.length) {
+            throw new APIError('Registro não encontrado', 404);
+          }
+          
+          res.json({
+            success: true,
+            message: 'Registro excluído com sucesso'
+          });
+        }
+      } catch (error) {
+        console.error(`Erro ao excluir registro em ${tableName}:`, error);
+        if (error instanceof APIError) {
+          res.status(error.statusCode).json({ error: error.message });
+        } else {
+          res.status(500).json({ error: 'Erro ao processar a solicitação' });
+        }
       }
-      
-      // Para soft delete, verificar se o item existe e não foi deletado
-      const whereClause = [eq(table.id, id)];
-      if (tableDef.softDelete) {
-        whereClause.push(eq(table.deletedAt, null));
-      }
-      
-      // Verificar se o registro existe
-      const existingRecord = await db.select({ id: table.id }).from(table)
-        .where(and(...whereClause))
-        .limit(1);
-      
-      if (existingRecord.length === 0) {
-        throw new APIError('Registro não encontrado', 404);
-      }
-      
-      // Se for soft delete, apenas atualizar o campo deletedAt
-      if (tableDef.softDelete) {
-        await db.update(table)
-          .set({ deletedAt: new Date() })
-          .where(eq(table.id, id));
-      } else {
-        // Se não for soft delete, remover o registro completamente
-        await db.delete(table).where(eq(table.id, id));
-      }
-      
-      res.json({
-        success: true,
-        message: `Registro de ${tableDef.name} removido com sucesso`
-      });
     }
   };
   
-  // Adicionar todos os endpoints ao cache
-  apiCache.endpoints.push(
-    listEndpoint,
-    getByIdEndpoint,
-    createEndpoint,
-    updateEndpoint,
-    deleteEndpoint
-  );
+  // Adiciona todos os endpoints ao array
+  endpoints.push(listEndpoint, getByIdEndpoint, createEndpoint, updateEndpoint, deleteEndpoint);
+  
+  // Adiciona todos os endpoints ao cache
+  apiCache.endpoints.push(...endpoints);
+  
+  return endpoints;
 }
 
-// Função auxiliar para contagem
+// Helpers para SQL
 function count(): SQL<number> {
-  return sql`count(*)`;
+  return sql`count(*) as count`;
 }
 
-// Função auxiliar para expressões SQL cruas
+// Helper para construir SQL seguro
 function sql(strings: TemplateStringsArray, ...values: any[]): SQL<unknown> {
-  return { strings, values } as any;
+  return null as any; // Placeholder, pois já temos o sql importado do drizzle
 }
 
 /**
@@ -580,8 +639,7 @@ export function getGeneratedAPIInfo() {
     endpoints: apiCache.endpoints.map(e => ({
       method: e.method,
       path: e.path,
-      description: e.description,
-      parameters: e.parameters
+      description: e.description
     }))
   };
 }
@@ -590,49 +648,60 @@ export function getGeneratedAPIInfo() {
  * Cria uma definição de tabela e API para um formulário
  */
 export async function createFormTableDefinition(formConfig: {
-  formName: string;
+  name: string;
+  description?: string;
+  projectId: number;
   fields: Array<{
     name: string;
-    label: string;
     type: string;
+    label: string;
     required?: boolean;
-    validation?: any;
-  }>;
-}) {
-  const tableName = formConfig.formName.toLowerCase().replace(/\s+/g, '_');
+    placeholder?: string;
+    defaultValue?: any;
+    options?: Array<{value: string; label: string}>
+  }>
+}): Promise<TableDefinition> {
+  // Gera um nome de tabela baseado no nome do formulário
+  const tableName = `p${formConfig.projectId}_form_${formConfig.name.toLowerCase().replace(/\s+/g, '_')}`;
   
-  // Converter definições de campo para definições de coluna
-  const columns: ColumnDefinition[] = formConfig.fields.map(field => {
-    // Mapear tipos de input para tipos de coluna
-    const columnType = mapInputTypeToColumnType(field.type);
-    
-    return {
+  // Cria colunas baseadas nos campos do formulário
+  const columns: ColumnDefinition[] = [
+    // Coluna ID padrão para todas as tabelas
+    {
+      name: 'id',
+      type: 'integer',
+      required: true,
+      // Esta será uma coluna SERIAL (autoincrement)
+    },
+    // Colunas baseadas nos campos do formulário
+    ...formConfig.fields.map(field => ({
       name: field.name.toLowerCase().replace(/\s+/g, '_'),
-      type: columnType,
+      type: mapInputTypeToColumnType(field.type),
       description: field.label,
-      required: field.required || false,
-      validation: field.validation
-    };
-  });
+      required: !!field.required,
+      default: field.defaultValue
+    })),
+    // Campo para registrar a data de envio do formulário
+    {
+      name: 'submission_date',
+      type: 'date',
+      description: 'Data de envio do formulário',
+      required: true,
+    }
+  ];
   
-  // Criar a definição da tabela
+  // Definição completa da tabela
   const tableDefinition: TableDefinition = {
-    name: formConfig.formName,
-    description: `Tabela gerada automaticamente para o formulário ${formConfig.formName}`,
+    name: `form_${formConfig.name}`,
+    description: formConfig.description || `Tabela para o formulário ${formConfig.name}`,
     tableName,
     columns,
-    apiEndpoints: true, // Gerar APIs CRUD padrão
-    timestamps: true,
-    softDelete: true
+    apiEndpoints: true, // Gerar endpoints CRUD por padrão
+    timestamps: true, // Adicionar campos de timestamp
+    softDelete: true // Permitir exclusão segura de registros
   };
   
-  // Gerar a tabela e as APIs
-  await generateTableDefinition(tableDefinition);
-  
-  return {
-    tableName,
-    apiBasePath: `/${tableName}`
-  };
+  return tableDefinition;
 }
 
 /**
@@ -641,11 +710,13 @@ export async function createFormTableDefinition(formConfig: {
 function mapInputTypeToColumnType(inputType: string): 'string' | 'integer' | 'number' | 'boolean' | 'json' | 'date' | 'reference' {
   const typeMap: Record<string, 'string' | 'integer' | 'number' | 'boolean' | 'json' | 'date' | 'reference'> = {
     'text': 'string',
-    'email': 'string',
-    'password': 'string',
-    'tel': 'string',
     'textarea': 'string',
+    'email': 'string',
+    'tel': 'string',
+    'url': 'string',
+    'password': 'string',
     'number': 'number',
+    'decimal': 'number',
     'integer': 'integer',
     'checkbox': 'boolean',
     'switch': 'boolean',
@@ -653,19 +724,267 @@ function mapInputTypeToColumnType(inputType: string): 'string' | 'integer' | 'nu
     'date': 'date',
     'datetime': 'date',
     'time': 'string',
+    'file': 'string', // Armazena o caminho do arquivo
     'select': 'string',
-    'multiselect': 'json',
+    'multiselect': 'json', // Armazena como JSON array
     'radio': 'string',
-    'file': 'string', // Caminho do arquivo
-    'image': 'string', // URL ou caminho da imagem
-    'color': 'string',
-    'url': 'string',
-    'range': 'number',
-    'rating': 'integer',
     'json': 'json',
     'reference': 'reference',
-    'relation': 'reference'
+    'color': 'string',
+    'range': 'number'
   };
   
   return typeMap[inputType] || 'string';
+}
+
+/**
+ * Registra APIs dinamicamente para tabelas existentes
+ */
+export async function registerDynamicAPIs(app: any, basePath: string = '/api') {
+  try {
+    // Buscar todas as tabelas no registro de metadados que têm API habilitada
+    const tablesWithApis = await db.query.projectDatabases.findMany({
+      where: eq(projectDatabases.apiEnabled, true),
+    });
+    
+    console.log(`Encontradas ${tablesWithApis.length} tabelas com APIs habilitadas`);
+    
+    // Para cada tabela, criar endpoints CRUD
+    for (const tableInfo of tablesWithApis) {
+      try {
+        // Buscar informações sobre as colunas da tabela
+        const columnQuery = `
+          SELECT 
+            column_name,
+            data_type,
+            is_nullable = 'YES' as is_nullable,
+            column_default
+          FROM information_schema.columns
+          WHERE table_name = $1
+          ORDER BY ordinal_position
+        `;
+        
+        const columnResult = await pool.query(columnQuery, [tableInfo.tableName]);
+        
+        // Mapear os resultados para o formato ColumnDefinition
+        const columns: ColumnDefinition[] = columnResult.rows.map(col => ({
+          name: col.column_name,
+          type: mapSqlTypeToColumnType(col.data_type),
+          required: !col.is_nullable && !col.column_default,
+        }));
+        
+        // Criar a definição de tabela
+        const tableDef: TableDefinition = {
+          name: tableInfo.displayName,
+          description: tableInfo.description || '',
+          tableName: tableInfo.tableName,
+          columns,
+          timestamps: columns.some(c => c.name === 'created_at' || c.name === 'updated_at'),
+          softDelete: columns.some(c => c.name === 'deleted_at'),
+        };
+        
+        // Gerar endpoints CRUD
+        const endpoints = generateCRUDEndpoints(tableDef, null);
+        
+        console.log(`Gerados ${endpoints.length} endpoints para a tabela ${tableInfo.tableName}`);
+      } catch (error) {
+        console.error(`Erro ao gerar endpoints para tabela ${tableInfo.tableName}:`, error);
+      }
+    }
+    
+    // Registrar todas as APIs geradas
+    registerGeneratedAPIs(app, basePath);
+    
+    console.log(`Total de ${apiCache.endpoints.length} endpoints registrados`);
+  } catch (error) {
+    console.error('Erro ao registrar APIs dinâmicas:', error);
+  }
+}
+
+// Função auxiliar para mapear tipos SQL para os tipos do nosso sistema
+function mapSqlTypeToColumnType(sqlType: string): 'string' | 'integer' | 'number' | 'boolean' | 'json' | 'date' | 'reference' {
+  const sqlLower = sqlType.toLowerCase();
+  
+  if (sqlLower.includes('int')) {
+    return 'integer';
+  } else if (sqlLower.includes('numeric') || sqlLower.includes('decimal') || sqlLower.includes('real') || sqlLower.includes('double')) {
+    return 'number';
+  } else if (sqlLower.includes('bool')) {
+    return 'boolean';
+  } else if (sqlLower.includes('json')) {
+    return 'json';
+  } else if (sqlLower.includes('date') || sqlLower.includes('time')) {
+    return 'date';
+  } else {
+    return 'string';
+  }
+}
+
+/**
+ * Constrói uma query SQL a partir de filtros de API
+ */
+export function buildFilteredQuery(
+  tableName: string,
+  filters: ApiFilter[],
+  params: Record<string, any>
+): SQL<unknown> {
+  // Constrói expressões WHERE para cada filtro
+  const filterExpressions: SQL<unknown>[] = [];
+  
+  for (const filter of filters) {
+    const { field, operator, paramName } = filter;
+    const paramValue = params[paramName];
+    
+    // Se o valor do parâmetro não foi fornecido, ignora este filtro
+    if (paramValue === undefined) continue;
+    
+    // Constrói a expressão SQL para cada operador
+    switch (operator) {
+      case FilterOperator.EQUALS:
+        filterExpressions.push(sql`${sql.identifier(field)} = ${paramValue}`);
+        break;
+      case FilterOperator.NOT_EQUALS:
+        filterExpressions.push(sql`${sql.identifier(field)} <> ${paramValue}`);
+        break;
+      case FilterOperator.GREATER_THAN:
+        filterExpressions.push(sql`${sql.identifier(field)} > ${paramValue}`);
+        break;
+      case FilterOperator.LESS_THAN:
+        filterExpressions.push(sql`${sql.identifier(field)} < ${paramValue}`);
+        break;
+      case FilterOperator.GREATER_THAN_OR_EQUALS:
+        filterExpressions.push(sql`${sql.identifier(field)} >= ${paramValue}`);
+        break;
+      case FilterOperator.LESS_THAN_OR_EQUALS:
+        filterExpressions.push(sql`${sql.identifier(field)} <= ${paramValue}`);
+        break;
+      case FilterOperator.LIKE:
+        filterExpressions.push(sql`${sql.identifier(field)} LIKE ${`%${paramValue}%`}`);
+        break;
+      case FilterOperator.ILIKE:
+        filterExpressions.push(sql`${sql.identifier(field)} ILIKE ${`%${paramValue}%`}`);
+        break;
+      case FilterOperator.IN:
+        if (Array.isArray(paramValue)) {
+          filterExpressions.push(sql`${sql.identifier(field)} IN ${paramValue}`);
+        }
+        break;
+      case FilterOperator.NOT_IN:
+        if (Array.isArray(paramValue)) {
+          filterExpressions.push(sql`${sql.identifier(field)} NOT IN ${paramValue}`);
+        }
+        break;
+      case FilterOperator.IS_NULL:
+        if (paramValue === true) {
+          filterExpressions.push(sql`${sql.identifier(field)} IS NULL`);
+        }
+        break;
+      case FilterOperator.IS_NOT_NULL:
+        if (paramValue === true) {
+          filterExpressions.push(sql`${sql.identifier(field)} IS NOT NULL`);
+        }
+        break;
+      case FilterOperator.CONTAINS:
+        // Para campos JSON ou arrays
+        filterExpressions.push(sql`${sql.identifier(field)} @> ${paramValue}`);
+        break;
+      case FilterOperator.STARTS_WITH:
+        filterExpressions.push(sql`${sql.identifier(field)} LIKE ${`${paramValue}%`}`);
+        break;
+      case FilterOperator.ENDS_WITH:
+        filterExpressions.push(sql`${sql.identifier(field)} LIKE ${`%${paramValue}`}`);
+        break;
+      // Outros casos podem ser adicionados conforme necessário
+    }
+  }
+  
+  // Combina todos os filtros com AND
+  if (filterExpressions.length === 0) {
+    return sql`SELECT * FROM ${sql.identifier(tableName)}`;
+  } else if (filterExpressions.length === 1) {
+    return sql`SELECT * FROM ${sql.identifier(tableName)} WHERE ${filterExpressions[0]}`;
+  } else {
+    return sql`SELECT * FROM ${sql.identifier(tableName)} WHERE ${sql.join(filterExpressions, sql` AND `)}`;    
+  }
+}
+
+/**
+ * Publica uma tabela existente para a API
+ */
+export async function publishTableToAPI(tableId: number): Promise<boolean> {
+  try {
+    // Buscar informações da tabela
+    const tableInfo = await db.query.projectDatabases.findFirst({
+      where: eq(projectDatabases.id, tableId),
+    });
+    
+    if (!tableInfo) {
+      throw new Error(`Tabela com ID ${tableId} não encontrada`);
+    }
+    
+    // Atualizar o registro para habilitar a API
+    await db.update(projectDatabases)
+      .set({ apiEnabled: true, updatedAt: new Date() })
+      .where(eq(projectDatabases.id, tableId));
+    
+    // Registrar endpoints na tabela de metadados de API
+    const apiMethods = ["GET", "POST", "PUT", "DELETE"];
+    const { projectId, tableName, displayName } = tableInfo;
+    
+    // Extrair o ID e nome base da tabela
+    const { projectId: extractedId, baseName } = parseProjectTableName(tableName);
+    
+    // Criar uma entrada para cada método
+    for (const method of apiMethods) {
+      const apiMetadata = {
+        projectId,
+        tableId,
+        apiPath: `/api/projects/${projectId}/${displayName.toLowerCase()}`,
+        method,
+        description: `API ${method} para tabela ${displayName}`,
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      
+      await db.insert(projectApis).values(apiMetadata).returning();
+    }
+    
+    console.log(`API para tabela ${tableName} registrada com sucesso`);
+    return true;
+  } catch (error) {
+    console.error(`Erro ao publicar tabela para API:`, error);
+    return false;
+  }
+}
+
+/**
+ * Despublica uma tabela da API
+ */
+export async function unpublishTableFromAPI(tableId: number): Promise<boolean> {
+  try {
+    // Buscar informações da tabela
+    const tableInfo = await db.query.projectDatabases.findFirst({
+      where: eq(projectDatabases.id, tableId),
+    });
+    
+    if (!tableInfo) {
+      throw new Error(`Tabela com ID ${tableId} não encontrada`);
+    }
+    
+    // Atualizar o registro para desabilitar a API
+    await db.update(projectDatabases)
+      .set({ apiEnabled: false, updatedAt: new Date() })
+      .where(eq(projectDatabases.id, tableId));
+    
+    // Remover endpoints da tabela de metadados de API
+    await db.delete(projectApis)
+      .where(eq(projectApis.tableId, tableId));
+    
+    console.log(`API para tabela ${tableInfo.tableName} despublicada com sucesso`);
+    return true;
+  } catch (error) {
+    console.error(`Erro ao despublicar tabela da API:`, error);
+    return false;
+  }
 }

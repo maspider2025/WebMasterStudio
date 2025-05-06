@@ -3,25 +3,74 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
 
-// Importar definições de tabelas para banco de dados e APIs de projetos
-import {
-  projectDatabases, projectApis, projectDatabasesRelations, projectApisRelations,
-  projectDatabasesInsertSchema, projectDatabasesSelectSchema, 
-  projectApisInsertSchema, projectApisSelectSchema,
-  generateProjectTableName, isProjectTable, getDisplayNameFromTableName,
-  type ProjectDatabase, type InsertProjectDatabase,
-  type ProjectApi, type InsertProjectApi
+// Esquemas para tabelas de gerenciamento de projetos e APIs
+
+// Tabela de associação entre projetos e tabelas de banco de dados
+export const projectDatabases = pgTable("project_databases", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").references(() => projects.id).notNull(),
+  tableName: text("table_name").notNull(),
+  displayName: text("display_name").notNull(),
+  description: text("description"),
+  apiEnabled: boolean("api_enabled").default(false),
+  isBuiltIn: boolean("is_built_in").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Tabela de metadados de APIs geradas para tabelas de projeto
+export const projectApis = pgTable("project_apis", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").references(() => projects.id).notNull(),
+  tableId: integer("table_id").references(() => projectDatabases.id),
+  apiPath: text("api_path").notNull(),
+  method: text("method").notNull(),
+  description: text("description"),
+  isActive: boolean("is_active").default(true),
+  isCustom: boolean("is_custom").default(false),
+  customConfig: jsonb("custom_config"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Relações
+export const projectDatabasesRelations = relations(projectDatabases, ({ one }) => ({
+  project: one(projects, {
+    fields: [projectDatabases.projectId],
+    references: [projects.id],
+  }),
+}));
+
+export const projectApisRelations = relations(projectApis, ({ one }) => ({
+  project: one(projects, {
+    fields: [projectApis.projectId],
+    references: [projects.id],
+  }),
+  table: one(projectDatabases, {
+    fields: [projectApis.tableId],
+    references: [projectDatabases.id],
+    nullable: true,
+  }),
+}));
+
+// Schemas Zod para validação
+export const projectDatabasesInsertSchema = createInsertSchema(projectDatabases);
+export const projectDatabasesSelectSchema = createSelectSchema(projectDatabases);
+export const projectApisInsertSchema = createInsertSchema(projectApis);
+export const projectApisSelectSchema = createSelectSchema(projectApis);
+
+// Exportar funções e tipos da associação entre projetos e tabelas
+export { 
+  generateProjectTableName, 
+  parseProjectTableName as isProjectTable, // Renomeado para compatibilidade
+  parseProjectTableName as getDisplayNameFromTableName // Renomeado para compatibilidade
 } from "./project-database-association";
 
-// Reexportar para uso em outros módulos
-export {
-  projectDatabases, projectApis, projectDatabasesRelations, projectApisRelations,
-  projectDatabasesInsertSchema, projectDatabasesSelectSchema, 
-  projectApisInsertSchema, projectApisSelectSchema,
-  generateProjectTableName, isProjectTable, getDisplayNameFromTableName,
-  type ProjectDatabase, type InsertProjectDatabase,
-  type ProjectApi, type InsertProjectApi
-};
+// Tipos para uso em outros módulos
+export type ProjectDatabase = z.infer<typeof projectDatabasesSelectSchema>;
+export type InsertProjectDatabase = z.infer<typeof projectDatabasesInsertSchema>;
+export type ProjectApi = z.infer<typeof projectApisSelectSchema>;
+export type InsertProjectApi = z.infer<typeof projectApisInsertSchema>;
 
 // User schema
 export const users = pgTable("users", {

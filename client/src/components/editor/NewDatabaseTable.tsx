@@ -174,6 +174,7 @@ export default function NewDatabaseTable({ onTableCreated }: NewDatabaseTablePro
     
     try {
       // Obter o ID do projeto atual de forma robusta
+      // Usando nosso novo resolveProjectId que tenta extrair o ID de várias fontes
       const projectId = await resolveProjectId('default');
       
       if (!projectId) {
@@ -188,14 +189,14 @@ export default function NewDatabaseTable({ onTableCreated }: NewDatabaseTablePro
       
       console.log("Criando tabela para o projeto ID:", projectId);
       
-      const response = await apiRequest('POST', '/api/database/tables', {
+      // Usando a nova rota específica por projeto
+      const response = await apiRequest('POST', `/api/projects/${projectId}/database/tables`, {
         name: tableName,
         description: tableDescription,
         columns,
         timestamps: includeTimestamps,
         softDelete: includeSoftDelete,
         generateApi: true, // Habilitar geração automática de API
-        projectId // Adicionar o ID do projeto à requisição
       });
       
       const data = await response.json();
