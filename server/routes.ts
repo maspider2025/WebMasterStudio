@@ -1547,6 +1547,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Endpoint para criar uma nova tabela no banco de dados
+  app.post(`${apiPrefix}/database/tables`, handleCreateDatabaseTable);
+  
   // Endpoint para obter schema de uma tabela específica
   app.get(`${apiPrefix}/database/tables/:tableName/schema`, async (req, res) => {
     try {
