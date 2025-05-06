@@ -34,9 +34,12 @@ export default function Editor() {
     
     // Se for um novo projeto, não carregue nenhum template
     if (isNewProject) {
+      const projectName = params.get('name') || 'Novo Projeto';
+      document.title = `${projectName} - NextGen Site Builder`;
+      
       toast({
-        title: "Novo projeto",
-        description: "Comece a criar seu site arrastando elementos do painel esquerdo para o canvas."
+        title: `Projeto: ${projectName}`,
+        description: "Comece a criar seu site arrastando elementos do painel esquerdo para o canvas. O projeto será criado sem banco de dados ou APIs."
       });
       return;
     }
