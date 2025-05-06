@@ -1675,6 +1675,163 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Endpoint para criar uma nova tabela no banco de dados
   app.post(`${apiPrefix}/database/tables`, handleCreateDatabaseTable);
   
+  // ============= APIS DINÂMICAS E GERENCIAMENTO =============
+  
+  // Endpoint para listar as APIs registradas para um projeto
+  app.get(`${apiPrefix}/project-apis`, async (req, res) => {
+    try {
+      const projectId = req.query.projectId ? parseInt(req.query.projectId as string, 10) : null;
+      
+      if (!projectId) {
+        return res.status(400).json({ message: "É necessário fornecer o ID do projeto" });
+      }
+      
+      // Buscar APIs registradas para o projeto
+      const apis = await db.query.projectApis.findMany({
+        where: eq(schema.projectApis.projectId, projectId),
+        with: {
+          table: true
+        }
+      });
+      
+      // Se já temos APIs registradas, retornamos elas
+      if (apis.length > 0) {
+        return res.json({
+          apis: apis.map(api => ({
+            id: api.id,
+            projectId: api.projectId,
+            path: api.apiPath,
+            method: api.method,
+            description: api.description || "",
+            tableName: api.table?.tableName,
+            displayName: api.table?.displayName,
+            isActive: api.isActive,
+            isCustom: api.isCustom,
+            createdAt: api.createdAt.toISOString()
+          }))
+        });
+      }
+      
+      // Se não temos APIs ainda, vamos criar as APIs padrão para tabelas registradas
+      const projectTables = await db.query.projectDatabases.findMany({
+        where: eq(schema.projectDatabases.projectId, projectId)
+      });
+      
+      // Para cada tabela, criamos endpoints CRUD padrão
+      const createdApis = [];
+      for (const table of projectTables) {
+        if (table.apiEnabled) {
+          // Lista todos os registros
+          const listApi = await db.insert(schema.projectApis).values({
+            projectId,
+            tableId: table.id,
+            apiPath: `/api/p${projectId}/${table.tableName}`,
+            method: 'GET',
+            description: `Listar todos os registros da tabela ${table.displayName}`,
+            isActive: true,
+            isCustom: false,
+            configuration: {
+              operation: 'list',
+              params: [],
+              filters: [],
+              pagination: true
+            }
+          }).returning();
+          createdApis.push(listApi[0]);
+          
+          // Buscar por ID
+          const getByIdApi = await db.insert(schema.projectApis).values({
+            projectId,
+            tableId: table.id,
+            apiPath: `/api/p${projectId}/${table.tableName}/:id`,
+            method: 'GET',
+            description: `Buscar registro por ID na tabela ${table.displayName}`,
+            isActive: true,
+            isCustom: false,
+            configuration: {
+              operation: 'getById',
+              params: [{ name: 'id', type: 'number', in: 'path' }],
+              filters: []
+            }
+          }).returning();
+          createdApis.push(getByIdApi[0]);
+          
+          // Criar novo registro
+          const createApi = await db.insert(schema.projectApis).values({
+            projectId,
+            tableId: table.id,
+            apiPath: `/api/p${projectId}/${table.tableName}`,
+            method: 'POST',
+            description: `Criar novo registro na tabela ${table.displayName}`,
+            isActive: true,
+            isCustom: false,
+            configuration: {
+              operation: 'create',
+              params: [{ name: 'body', type: 'object', in: 'body' }],
+              filters: []
+            }
+          }).returning();
+          createdApis.push(createApi[0]);
+          
+          // Atualizar registro
+          const updateApi = await db.insert(schema.projectApis).values({
+            projectId,
+            tableId: table.id,
+            apiPath: `/api/p${projectId}/${table.tableName}/:id`,
+            method: 'PUT',
+            description: `Atualizar registro na tabela ${table.displayName}`,
+            isActive: true,
+            isCustom: false,
+            configuration: {
+              operation: 'update',
+              params: [
+                { name: 'id', type: 'number', in: 'path' },
+                { name: 'body', type: 'object', in: 'body' }
+              ],
+              filters: []
+            }
+          }).returning();
+          createdApis.push(updateApi[0]);
+          
+          // Excluir registro
+          const deleteApi = await db.insert(schema.projectApis).values({
+            projectId,
+            tableId: table.id,
+            apiPath: `/api/p${projectId}/${table.tableName}/:id`,
+            method: 'DELETE',
+            description: `Excluir registro da tabela ${table.displayName}`,
+            isActive: true,
+            isCustom: false,
+            configuration: {
+              operation: 'delete',
+              params: [{ name: 'id', type: 'number', in: 'path' }],
+              filters: []
+            }
+          }).returning();
+          createdApis.push(deleteApi[0]);
+        }
+      }
+      
+      // Formatar resposta
+      const formattedApis = createdApis.map(api => ({
+        id: api.id,
+        projectId: api.projectId,
+        path: api.apiPath,
+        method: api.method,
+        description: api.description || "",
+        tableName: projectTables.find(t => t.id === api.tableId)?.tableName,
+        displayName: projectTables.find(t => t.id === api.tableId)?.displayName,
+        isActive: api.isActive,
+        isCustom: api.isCustom,
+        createdAt: api.createdAt.toISOString()
+      }));
+      
+      res.json({ apis: formattedApis });
+    } catch (error) {
+      handleError(res, error, "Erro ao buscar APIs do projeto");
+    }
+  });
+  
   // Endpoint para obter schema de uma tabela específica
   app.get(`${apiPrefix}/database/tables/:tableName/schema`, async (req, res) => {
     try {
