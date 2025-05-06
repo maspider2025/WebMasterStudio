@@ -1,0 +1,67 @@
+### Configuração de Variáveis
+@baseUrl = http://localhost:5000
+@token = SEU_TOKEN_JWT
+
+### Login para obter token
+# @name login
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin123"
+}
+
+### Extrair token da resposta de login
+@authToken = {{login.response.body.token}}
+
+### Listar todas as tabelas de um projeto
+GET {{baseUrl}}/api/projects/1/database/tables
+Authorization: Bearer {{authToken}}
+
+### Obter estrutura (schema) de uma tabela específica
+GET {{baseUrl}}/api/projects/1/database/tables/produtos/schema
+Authorization: Bearer {{authToken}}
+
+### Obter dados de uma tabela específica
+GET {{baseUrl}}/api/projects/1/database/tables/produtos/data
+Authorization: Bearer {{authToken}}
+
+### Criar uma nova tabela no projeto
+POST {{baseUrl}}/api/projects/1/database/tables
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "name": "clientes",
+  "description": "Tabela de clientes do sistema",
+  "columns": [
+    {
+      "name": "id",
+      "type": "integer",
+      "primary": true,
+      "notNull": true
+    },
+    {
+      "name": "nome",
+      "type": "string",
+      "notNull": true
+    },
+    {
+      "name": "email",
+      "type": "string",
+      "notNull": true
+    },
+    {
+      "name": "telefone",
+      "type": "string"
+    },
+    {
+      "name": "data_nascimento",
+      "type": "date"
+    }
+  ],
+  "timestamps": true,
+  "softDelete": true,
+  "generateApi": true
+}

@@ -9,6 +9,7 @@ import * as schema from "@shared/schema";
 import { randomUUID } from "crypto";
 import Stripe from "stripe";
 import { createPaypalOrder, capturePaypalOrder, loadPaypalDefault } from "./paypal";
+import { projectTableManager } from "./services/project-table-manager";
 import pkg from 'pg';
 const { Pool } = pkg;
 
@@ -5865,5 +5866,433 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
   });
 
   const httpServer = createServer(app);
+  /**
+   * Rotas para integração com o editor visual
+   * Estas rotas fornecem endpoints que o frontend do editor usa para visualizar e manipular
+   * tabelas de banco de dados, APIs e outros recursos por projeto
+   */
+  
+  // Rota para listar todas as tabelas de um projeto
+  app.get('/api/projects/:projectId/database/tables', isAuthenticated, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      
+      if (isNaN(projectId)) {
+        return res.status(400).json({ message: 'ID de projeto inválido' });
+      }
+      
+      // Verificar se o usuário tem acesso ao projeto
+      const project = await db.query.projects.findFirst({
+        where: and(
+          eq(schema.projects.id, projectId),
+          eq(schema.projects.userId, req.user!.id)
+        )
+      });
+      
+      if (!project) {
+        return res.status(403).json({ message: 'Você não tem acesso a este projeto' });
+      }
+      
+      // Consulta no PostgreSQL para listar todas as tabelas do projeto
+      const query = `
+        SELECT 
+          table_name,
+          obj_description((quote_ident('public') || '.' || quote_ident(table_name))::regclass, 'pg_class') as description
+        FROM 
+          information_schema.tables
+        WHERE 
+          table_schema = 'public' AND 
+          table_name LIKE 'p${projectId}\_%'
+        ORDER BY 
+          table_name;
+      `;
+      
+      const tablesResult = await pool.query(query);
+      
+      // Para cada tabela, contar o número de registros e obter mais informações
+      const tablesWithData = await Promise.all(tablesResult.rows.map(async (table: any) => {
+        // Extrair o nome real da tabela (sem o prefixo)
+        const displayName = table.table_name.replace(`p${projectId}_`, '');
+        
+        // Contar registros (respeitando soft delete se existir)
+        const countQuery = `
+          SELECT COUNT(*) as row_count 
+          FROM "${table.table_name}" 
+          ${await tableHasSoftDelete(table.table_name) ? 'WHERE deleted_at IS NULL' : ''}
+        `;
+        
+        const countResult = await pool.query(countQuery);
+        const rowCount = parseInt(countResult.rows[0]?.row_count || '0');
+        
+        // Verificar se existe API para esta tabela
+        const apiCheck = await db.query.projectApis.findFirst({
+          where: and(
+            eq(schema.projectApis.projectId, projectId),
+            eq(schema.projectApis.tableName, displayName)
+          )
+        });
+        
+        // Buscar quando a tabela foi criada
+        const createdAtQuery = `
+          SELECT create_time 
+          FROM pg_stat_user_tables 
+          WHERE relname = $1
+        `;
+        
+        const createdAtResult = await pool.query(createdAtQuery, [table.table_name]);
+        const createdAt = createdAtResult.rows[0]?.create_time;
+        
+        return {
+          name: displayName,
+          originalName: table.table_name,
+          description: table.description || `Tabela ${displayName}`,
+          rowCount,
+          hasApi: !!apiCheck,
+          createdAt
+        };
+      }));
+      
+      res.json({ 
+        tables: tablesWithData,
+        projectId
+      });
+    } catch (error) {
+      console.error('Erro ao listar tabelas:', error);
+      res.status(500).json({ message: 'Erro ao listar tabelas do projeto', error: String(error) });
+    }
+  });
+  
+  // Função auxiliar para verificar se a tabela tem coluna deleted_at (soft delete)
+  async function tableHasSoftDelete(tableName: string): Promise<boolean> {
+    const query = `
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = $1 AND column_name = 'deleted_at'
+      ) as has_soft_delete;
+    `;
+    
+    const result = await pool.query(query, [tableName]);
+    return result.rows[0]?.has_soft_delete || false;
+  }
+  
+  // Rota para obter o schema (estrutura) de uma tabela específica
+  app.get('/api/projects/:projectId/database/tables/:tableName/schema', isAuthenticated, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const tableName = req.params.tableName;
+      
+      if (isNaN(projectId) || !tableName) {
+        return res.status(400).json({ message: 'Parâmetros inválidos' });
+      }
+      
+      // Verificar se o usuário tem acesso ao projeto
+      const project = await db.query.projects.findFirst({
+        where: and(
+          eq(schema.projects.id, projectId),
+          eq(schema.projects.userId, req.user!.id)
+        )
+      });
+      
+      if (!project) {
+        return res.status(403).json({ message: 'Você não tem acesso a este projeto' });
+      }
+      
+      // Nome completo da tabela com o prefixo do projeto
+      const fullTableName = `p${projectId}_${tableName}`;
+      
+      // Verificar se a tabela existe
+      const tableCheck = await pool.query(
+        "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = $1)",
+        [fullTableName]
+      );
+      
+      if (!tableCheck.rows[0].exists) {
+        return res.status(404).json({ message: `Tabela '${tableName}' não encontrada` });
+      }
+      
+      // Obter estrutura da tabela usando nosso ProjectTableManager
+      const schemaResult = await projectTableManager.getTableSchema(projectId, tableName);
+      
+      if (!schemaResult.success) {
+        return res.status(500).json({ message: schemaResult.error });
+      }
+      
+      // Obter chaves primárias
+      const primaryKeysQuery = `
+        SELECT a.attname as column_name
+        FROM pg_index i
+        JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+        WHERE i.indrelid = $1::regclass AND i.indisprimary;
+      `;
+      
+      const primaryKeysResult = await pool.query(primaryKeysQuery, [fullTableName]);
+      const primaryKeys = primaryKeysResult.rows.map((row: any) => row.column_name);
+      
+      res.json({
+        ...schemaResult.data,
+        primaryKeys,
+        tableName,
+        fullTableName
+      });
+    } catch (error) {
+      console.error('Erro ao obter schema da tabela:', error);
+      res.status(500).json({ message: 'Erro ao obter estrutura da tabela', error: String(error) });
+    }
+  });
+  
+  // Rota para obter dados de uma tabela específica
+  app.get('/api/projects/:projectId/database/tables/:tableName/data', isAuthenticated, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const tableName = req.params.tableName;
+      
+      if (isNaN(projectId) || !tableName) {
+        return res.status(400).json({ message: 'Parâmetros inválidos' });
+      }
+      
+      // Verificar se o usuário tem acesso ao projeto
+      const project = await db.query.projects.findFirst({
+        where: and(
+          eq(schema.projects.id, projectId),
+          eq(schema.projects.userId, req.user!.id)
+        )
+      });
+      
+      if (!project) {
+        return res.status(403).json({ message: 'Você não tem acesso a este projeto' });
+      }
+      
+      // Parâmetros de paginação e ordenação
+      const page = req.query.page ? parseInt(req.query.page as string) : 1;
+      const pageSize = req.query.pageSize ? parseInt(req.query.pageSize as string) : 10;
+      const orderBy = req.query.orderBy as string;
+      const orderDirection = (req.query.orderDirection as 'asc' | 'desc') || 'asc';
+      
+      // Buscar dados usando nosso ProjectTableManager
+      const result = await projectTableManager.queryRecords(
+        projectId,
+        tableName,
+        [], // filtros vazios para trazer todos os registros
+        { page, pageSize, orderBy, orderDirection }
+      );
+      
+      if (!result.success) {
+        return res.status(500).json({ message: result.error });
+      }
+      
+      res.json({
+        data: result.data,
+        meta: {
+          pagination: {
+            page,
+            pageSize,
+            total: result.count,
+            totalPages: result.totalPages
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Erro ao obter dados da tabela:', error);
+      res.status(500).json({ message: 'Erro ao obter dados da tabela', error: String(error) });
+    }
+  });
+  
+  // Rota para criar uma nova tabela no projeto
+  app.post('/api/projects/:projectId/database/tables', isAuthenticated, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      
+      if (isNaN(projectId)) {
+        return res.status(400).json({ message: 'ID de projeto inválido' });
+      }
+      
+      // Verificar se o usuário tem acesso ao projeto
+      const project = await db.query.projects.findFirst({
+        where: and(
+          eq(schema.projects.id, projectId),
+          eq(schema.projects.userId, req.user!.id)
+        )
+      });
+      
+      if (!project) {
+        return res.status(403).json({ message: 'Você não tem acesso a este projeto' });
+      }
+      
+      const { name, description, columns, timestamps, softDelete, generateApi } = req.body;
+      
+      if (!name || !columns || !Array.isArray(columns)) {
+        return res.status(400).json({ message: 'Nome da tabela e definição de colunas são obrigatórios' });
+      }
+      
+      // Validar nome da tabela (apenas letras, números e underscores)
+      if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(name)) {
+        return res.status(400).json({ 
+          message: 'Nome da tabela inválido. Use apenas letras, números e underscores, começando com uma letra.' 
+        });
+      }
+      
+      // Preparar definição da tabela
+      const tableDefinition = {
+        name,
+        description,
+        columns: columns.map((col: any) => ({
+          name: col.name,
+          type: mapTypeToSQL(col.type),
+          nullable: !col.notNull,
+          primaryKey: col.primary
+        }))
+      };
+      
+      // Adicionar colunas para timestamps se solicitado
+      if (timestamps) {
+        if (!tableDefinition.columns.some(col => col.name === 'created_at')) {
+          tableDefinition.columns.push({
+            name: 'created_at',
+            type: 'TIMESTAMP',
+            nullable: false,
+            defaultValue: 'CURRENT_TIMESTAMP'
+          });
+        }
+        
+        if (!tableDefinition.columns.some(col => col.name === 'updated_at')) {
+          tableDefinition.columns.push({
+            name: 'updated_at',
+            type: 'TIMESTAMP',
+            nullable: true
+          });
+        }
+      }
+      
+      // Adicionar coluna para soft delete se solicitado
+      if (softDelete && !tableDefinition.columns.some(col => col.name === 'deleted_at')) {
+        tableDefinition.columns.push({
+          name: 'deleted_at',
+          type: 'TIMESTAMP',
+          nullable: true
+        });
+      }
+      
+      // Criar a tabela usando nosso ProjectTableManager
+      const result = await projectTableManager.createTable(projectId, tableDefinition);
+      
+      if (!result.success) {
+        return res.status(500).json({ message: result.error });
+      }
+      
+      // Registrar a tabela no catálogo de banco de dados do projeto
+      await db.insert(schema.projectDatabases).values({
+        projectId,
+        tableName: name,
+        displayName: name,
+        description: description || `Tabela ${name}`,
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+      
+      // Se solicitado, gerar APIs para a tabela
+      if (generateApi) {
+        // Registrar endpoints CRUD padrão
+        const endpoints = [
+          { method: 'GET', path: `/api/p/${projectId}/data/${name}`, description: `Lista todos os registros da tabela ${name}` },
+          { method: 'GET', path: `/api/p/${projectId}/data/${name}/:id`, description: `Busca um registro específico da tabela ${name} pelo ID` },
+          { method: 'POST', path: `/api/p/${projectId}/data/${name}`, description: `Cria um novo registro na tabela ${name}` },
+          { method: 'PUT', path: `/api/p/${projectId}/data/${name}/:id`, description: `Atualiza um registro existente na tabela ${name}` },
+          { method: 'DELETE', path: `/api/p/${projectId}/data/${name}/:id`, description: `Remove um registro da tabela ${name}` }
+        ];
+        
+        for (const endpoint of endpoints) {
+          await db.insert(schema.projectApis).values({
+            projectId,
+            apiPath: endpoint.path,
+            method: endpoint.method,
+            description: endpoint.description,
+            tableName: name,
+            displayName: name,
+            isActive: true,
+            isCustom: false,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          });
+        }
+      }
+      
+      res.status(201).json({
+        message: 'Tabela criada com sucesso',
+        table: {
+          name,
+          description,
+          fullName: `p${projectId}_${name}`,
+          generated: generateApi ? 'APIs CRUD geradas automaticamente' : undefined
+        }
+      });
+    } catch (error) {
+      console.error('Erro ao criar tabela:', error);
+      res.status(500).json({ message: 'Erro ao criar nova tabela', error: String(error) });
+    }
+  });
+  
+  // Rotas para listar e gerenciar APIs de projeto
+  app.get('/api/project-apis', isAuthenticated, async (req, res) => {
+    try {
+      const projectId = parseInt(req.query.projectId as string);
+      
+      if (isNaN(projectId)) {
+        return res.status(400).json({ message: 'ID de projeto inválido' });
+      }
+      
+      // Verificar se o usuário tem acesso ao projeto
+      const project = await db.query.projects.findFirst({
+        where: and(
+          eq(schema.projects.id, projectId),
+          eq(schema.projects.userId, req.user!.id)
+        )
+      });
+      
+      if (!project) {
+        return res.status(403).json({ message: 'Você não tem acesso a este projeto' });
+      }
+      
+      // Buscar APIs do projeto
+      const apis = await db.query.projectApis.findMany({
+        where: eq(schema.projectApis.projectId, projectId),
+        orderBy: [desc(schema.projectApis.createdAt)]
+      });
+      
+      res.json({ apis });
+    } catch (error) {
+      console.error('Erro ao listar APIs do projeto:', error);
+      res.status(500).json({ message: 'Erro ao listar APIs', error: String(error) });
+    }
+  });
+  
+  // Rota para obter projeto por nome
+  app.get('/api/projects/by-name/:name', isAuthenticated, async (req, res) => {
+    try {
+      const projectName = req.params.name;
+      
+      if (!projectName) {
+        return res.status(400).json({ message: 'Nome do projeto não fornecido' });
+      }
+      
+      // Buscar projeto por nome
+      const project = await db.query.projects.findFirst({
+        where: and(
+          eq(schema.projects.name, projectName),
+          eq(schema.projects.userId, req.user!.id)
+        )
+      });
+      
+      if (!project) {
+        return res.status(404).json({ message: 'Projeto não encontrado' });
+      }
+      
+      res.json(project);
+    } catch (error) {
+      console.error('Erro ao buscar projeto por nome:', error);
+      res.status(500).json({ message: 'Erro ao buscar projeto', error: String(error) });
+    }
+  });
+  
   return httpServer;
 }
