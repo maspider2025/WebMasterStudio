@@ -31,6 +31,8 @@ const Canvas = ({ viewMode, zoom }: CanvasProps) => {
   const [activeView, setActiveView] = useState<'editor' | 'preview'>('editor');
   const [templateViewportMode, setTemplateViewportMode] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   const canvasRef = useRef<HTMLDivElement>(null);
+  // Armazenamento alternativo para a referência do canvas
+  const canvasRefValue = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     // Show AI tip after a delay
@@ -239,6 +241,36 @@ const Canvas = ({ viewMode, zoom }: CanvasProps) => {
                 </div>
 
                 <div className="h-6 w-px bg-border mx-1"></div>
+                
+                {/* Botões para remover elementos */}
+                <div className="flex items-center space-x-1">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className={selectedElementId ? 'bg-destructive/20 hover:bg-destructive/30' : 'opacity-50'}
+                    onClick={() => selectedElementId && useEditorStore.getState().deleteElement(selectedElementId)} 
+                    title="Remover Elemento Selecionado"
+                    disabled={!selectedElementId}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="bg-red-500/10 hover:bg-red-500/30"
+                    onClick={() => useEditorStore.getState().clearCanvas()} 
+                    title="Limpar Todos os Elementos"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    <span className="text-xs ml-1">Limpar Tudo</span>
+                  </Button>
+                </div>
+                
+                <div className="h-6 w-px bg-border mx-1"></div>
 
                 <div className="flex items-center space-x-1">
                   <select
@@ -263,15 +295,7 @@ const Canvas = ({ viewMode, zoom }: CanvasProps) => {
 
               <div 
                 id="editor-canvas"
-                ref={(node) => {
-                  // Apply the drop ref from react-dnd
-                  drop(node);
-                  // Use a different approach instead of directly modifying the read-only current property
-                  if (canvasRef.current !== node) {
-                    // This will update the ref without directly assigning to .current
-                    canvasRef.current = node as HTMLDivElement;
-                  }
-                }}
+                ref={drop}
                 className={`w-full bg-white shadow-xl relative overflow-y-auto mx-auto rounded-md ${
                   useEditorStore.getState().showGrid ? 'canvas-grid' : ''
                 } ${

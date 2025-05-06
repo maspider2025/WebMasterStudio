@@ -540,12 +540,14 @@ export const useEditorStore = create<EditorState>()(
         
         // Snap to grid if enabled
         if (get().snapToGrid && get().gridSize !== 'none') {
-          const gridSizeMap = { small: 4, medium: 8, large: 16 };
-          const size = gridSizeMap[get().gridSize] || 8;
-          newElement.x = snapToGrid(newElement.x, size);
-          newElement.y = snapToGrid(newElement.y, size);
-          newElement.width = snapToGrid(newElement.width, size);
-          newElement.height = snapToGrid(newElement.height, size);
+          const gridSizeMap = { small: 4, medium: 8, large: 16, none: 0 };
+          const size = get().gridSize === 'none' ? 0 : gridSizeMap[get().gridSize as 'small' | 'medium' | 'large'];
+          if (size > 0) {
+            newElement.x = snapToGrid(newElement.x, size);
+            newElement.y = snapToGrid(newElement.y, size);
+            newElement.width = snapToGrid(newElement.width, size);
+            newElement.height = snapToGrid(newElement.height, size);
+          }
         }
         
         set((state) => {
@@ -1045,6 +1047,90 @@ export const useEditorStore = create<EditorState>()(
         });
         
         // Create a snapshot for history
+        get().createSnapshot();
+      },
+      
+      // UI Control implementations
+      toggleGrid: () => set(state => ({ showGrid: !state.showGrid })),
+      toggleSnapToGrid: () => set(state => ({ snapToGrid: !state.snapToGrid })),
+      toggleSnapToElements: () => set(state => ({ snapToElements: !state.snapToElements })),
+      toggleGuides: () => set(state => ({ showGuides: !state.showGuides })),
+      toggleRulers: () => set(state => ({ rulers: !state.rulers })),
+      toggleFullscreenPreview: () => set(state => ({ fullscreenPreview: !state.fullscreenPreview })),
+      
+      // Multiple selection implementations
+      selectMultipleElements: (ids) => set({ multipleSelection: ids }),
+      toggleElementSelection: (id) => set(state => {
+        const isSelected = state.multipleSelection.includes(id);
+        if (isSelected) {
+          return { multipleSelection: state.multipleSelection.filter(item => item !== id) };
+        } else {
+          return { multipleSelection: [...state.multipleSelection, id] };
+        }
+      }),
+      
+      // Multiple selection operations
+      deleteSelectedElements: () => {
+        set(state => {
+          if (state.multipleSelection.length === 0 && state.selectedElementId) {
+            return { 
+              elements: state.elements.filter(el => el.id !== state.selectedElementId),
+              selectedElementId: null
+            };
+          }
+          
+          return { 
+            elements: state.elements.filter(el => !state.multipleSelection.includes(el.id)),
+            multipleSelection: [],
+            selectedElementId: null
+          };
+        });
+        
+        get().createSnapshot();
+      },
+      
+      duplicateSelectedElements: () => {
+        set(state => {
+          if (state.multipleSelection.length === 0 && state.selectedElementId) {
+            const elementToDuplicate = state.elements.find(el => el.id === state.selectedElementId);
+            if (!elementToDuplicate) return state;
+            
+            const duplicatedElement = {
+              ...structuredClone(elementToDuplicate),
+              id: `element-${Date.now()}`,
+              x: elementToDuplicate.x + 20,
+              y: elementToDuplicate.y + 20,
+              children: [],
+              parent: undefined,
+            };
+            
+            return { 
+              elements: [...state.elements, duplicatedElement],
+              selectedElementId: duplicatedElement.id
+            };
+          }
+          
+          const elementsToDuplicate = state.elements.filter(el => 
+            state.multipleSelection.includes(el.id));
+          
+          const duplicatedElements = elementsToDuplicate.map(el => ({
+            ...structuredClone(el),
+            id: `element-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+            x: el.x + 20,
+            y: el.y + 20,
+            children: [],
+            parent: undefined,
+          }));
+          
+          const newMultipleSelection = duplicatedElements.map(el => el.id);
+          
+          return { 
+            elements: [...state.elements, ...duplicatedElements],
+            multipleSelection: newMultipleSelection,
+            selectedElementId: null
+          };
+        });
+        
         get().createSnapshot();
       },
       
