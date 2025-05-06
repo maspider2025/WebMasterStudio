@@ -24,20 +24,57 @@ export default function Editor() {
   const { toast } = useToast();
   const [location] = useLocation();
 
-  // Load template from URL parameter if specified
+  // Load template from URL parameter if specified, or project by ID
   const loadTemplateFromUrl = useCallback(async () => {
-    // Parse template parameter from URL
+    // Parse URL parameters
     const params = new URLSearchParams(window.location.search);
     const templateType = params.get('template');
+    const projectId = params.get('id');
+    const isNewProject = params.get('new') === 'true';
     
+    // Se for um novo projeto, não carregue nenhum template
+    if (isNewProject) {
+      toast({
+        title: "Novo projeto",
+        description: "Comece a criar seu site arrastando elementos do painel esquerdo para o canvas."
+      });
+      return;
+    }
+    
+    // Se houver um ID de projeto, carregue o projeto existente
+    if (projectId) {
+      try {
+        const response = await fetch(`/api/projects/${projectId}`);
+        if (!response.ok) {
+          throw new Error("Projeto não encontrado");
+        }
+        
+        const project = await response.json();
+        // Assumindo que o projeto tem uma propriedade 'elements' que contém os elementos
+        loadTemplate(project.elements);
+        
+        toast({
+          title: "Projeto carregado",
+          description: `O projeto '${project.name}' foi carregado com sucesso.`
+        });
+      } catch (error) {
+        console.error('Erro ao carregar projeto:', error);
+        toast({
+          title: "Erro ao carregar projeto",
+          description: "Não foi possível carregar o projeto solicitado.",
+          variant: "destructive"
+        });
+      }
+      return;
+    }
+    
+    // Se for um template específico, carregue o template
     if (templateType === 'ecommerce') {
-      // Import the template module and load the e-commerce template
       try {
         const { templates } = await import('@/lib/templates');
         const ecommerceTemplates = templates.ecommerce.items;
         
         if (ecommerceTemplates && ecommerceTemplates.length > 0) {
-          // Load the first e-commerce template
           const template = ecommerceTemplates[0];
           loadTemplate(template.elements);
           

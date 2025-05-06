@@ -13,11 +13,15 @@ import Checkout from "@/pages/checkout";
 import Subscribe from "@/pages/subscribe";
 import OrderConfirmation from "@/pages/order-confirmation";
 
+// Importando a página de Meus Projetos
+import MeusProjetos from "@/pages/meus-projetos";
+
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/editor" component={Editor} />
+      <Route path="/meus-projetos" component={MeusProjetos} />
       <Route path="/produtos" component={Products} />
       <Route path="/produtos/:slug" component={ProductDetails} />
       <Route path="/carrinho" component={Cart} />

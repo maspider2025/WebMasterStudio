@@ -56,13 +56,24 @@ export default function Home() {
               assistência de IA e ferramentas profissionais.
             </p>
             <div className="flex items-center justify-center gap-4">
-              <Link href="/editor">
+              <Link href="/editor?new=true">
                 <Button size="lg" className="text-lg px-8 py-6">
-                  Começar Agora
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                  </svg>
+                  Novo Projeto
+                </Button>
+              </Link>
+              <Link href="/meus-projetos">
+                <Button size="lg" className="text-lg px-8 py-6" variant="outline">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                  </svg>
+                  Meus Projetos
                 </Button>
               </Link>
               <Link href="/editor?template=ecommerce">
-                <Button size="lg" className="text-lg px-8 py-6" variant="outline">
+                <Button size="lg" className="text-lg px-8 py-6" variant="secondary">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
                   </svg>
