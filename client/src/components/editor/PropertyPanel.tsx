@@ -100,9 +100,10 @@ const PropertyPanel = () => {
   return (
     <aside className="w-80 border-l border-border flex flex-col overflow-hidden">
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
-        <TabsList className="w-full grid grid-cols-3 rounded-none">
+        <TabsList className="w-full grid grid-cols-4 rounded-none">
           <TabsTrigger value="properties">Propriedades</TabsTrigger>
           <TabsTrigger value="animations">Animações</TabsTrigger>
+          <TabsTrigger value="code">Código</TabsTrigger>
           <TabsTrigger value="data">Dados</TabsTrigger>
         </TabsList>
         
@@ -111,7 +112,27 @@ const PropertyPanel = () => {
             <>
               {/* Element Information */}
               <div className="mb-6">
-                <h2 className="text-sm font-medium mb-4 text-foreground">Informações</h2>
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-sm font-medium text-foreground">Informações</h2>
+                  <div className="flex gap-1">
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className="h-7 px-2 text-xs"
+                      onClick={() => setShowAdvancedCssEditor(true)}
+                    >
+                      Editor CSS
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className="h-7 px-2 text-xs"
+                      onClick={() => setShowCssLibrary(true)}
+                    >
+                      Biblioteca
+                    </Button>
+                  </div>
+                </div>
                 <div className="space-y-3">
                   <div>
                     <Label className="text-xs text-muted-foreground">Nome do Elemento</Label>
@@ -443,19 +464,101 @@ const PropertyPanel = () => {
           )}
         </TabsContent>
         
-        <TabsContent value="animations" className="flex-1 data-[state=inactive]:hidden p-4">
-          <div className="h-full flex items-center justify-center text-center">
-            <div>
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto mb-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <p className="text-muted-foreground mb-4">
-                Configure animações e transições para seus elementos
-              </p>
-              <Button disabled>Adicionar Animação</Button>
+        <TabsContent value="animations" className="flex-1 data-[state=inactive]:hidden overflow-y-auto p-0">
+          {selectedElement ? (
+            <AnimationEditor
+              animations={selectedElement.animations || []}
+              onAddAnimation={handleAddAnimation}
+              onUpdateAnimation={handleUpdateAnimation}
+              onRemoveAnimation={handleRemoveAnimation}
+            />
+          ) : (
+            <div className="h-full flex items-center justify-center text-center p-4 text-muted-foreground">
+              <div>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <h3 className="mt-4 text-lg font-medium">Selecione um elemento</h3>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Selecione um elemento para adicionar ou editar animações.
+                </p>
+              </div>
             </div>
-          </div>
+          )}
+        </TabsContent>
+        
+        <TabsContent value="code" className="flex-1 data-[state=inactive]:hidden overflow-y-auto p-0">
+          {selectedElement ? (
+            <div className="p-4">
+              <div className="space-y-4">
+                <Button 
+                  className="w-full"
+                  onClick={() => setShowHtmlEditor(true)}
+                >
+                  Abrir Editor HTML/CSS/JavaScript
+                </Button>
+                
+                <div>
+                  <Label className="text-sm font-medium">Classes CSS</Label>
+                  <Input
+                    value={selectedElement.cssClasses?.join(' ') || ''}
+                    onChange={(e) => {
+                      const classes = e.target.value.split(' ').filter(Boolean);
+                      updateElementContent(selectedElement.id, { cssClasses: classes });
+                    }}
+                    className="mt-1.5 bg-muted border border-border"
+                    placeholder="Exemplo: btn btn-primary size-lg"
+                  />
+                </div>
+                
+                <div>
+                  <Label className="text-sm font-medium">Atributos HTML</Label>
+                  <div className="grid grid-cols-2 gap-2 mt-1.5">
+                    <Input
+                      placeholder="Nome do atributo"
+                      className="bg-muted border border-border"
+                    />
+                    <Input
+                      placeholder="Valor"
+                      className="bg-muted border border-border"
+                    />
+                  </div>
+                  <div className="mt-2 flex justify-end">
+                    <Button size="sm" variant="outline">
+                      Adicionar Atributo
+                    </Button>
+                  </div>
+                </div>
+                
+                {selectedElement.htmlAttributes && Object.keys(selectedElement.htmlAttributes).length > 0 && (
+                  <div className="bg-muted/50 rounded-md p-3 border border-border mt-2">
+                    <Label className="text-xs text-muted-foreground">Atributos atuais:</Label>
+                    <div className="mt-1 space-y-1">
+                      {Object.entries(selectedElement.htmlAttributes).map(([key, value]) => (
+                        <div key={key} className="flex justify-between text-xs">
+                          <span className="font-mono">{key}</span>
+                          <span className="font-mono text-muted-foreground">{value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="h-full flex items-center justify-center text-center p-4 text-muted-foreground">
+              <div>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <h3 className="mt-4 text-lg font-medium">Selecione um elemento</h3>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Selecione um elemento para editar seu código e atributos.
+                </p>
+              </div>
+            </div>
+          )}
         </TabsContent>
         
         <TabsContent value="data" className="flex-1 data-[state=inactive]:hidden p-4">
@@ -504,6 +607,79 @@ const PropertyPanel = () => {
           </div>
         </div>
       </div>
+
+      {/* Dialogs para editores avançados */}
+      <Dialog open={showAdvancedCssEditor} onOpenChange={setShowAdvancedCssEditor}>
+        <DialogContent className="sm:max-w-[90%] h-[90vh] max-h-[90vh] flex flex-col overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>Editor CSS Avançado</DialogTitle>
+            <DialogDescription>
+              Configure opções avançadas de estilo para o elemento selecionado.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto">
+            {selectedElement && (
+              <AdvancedCssEditor 
+                styles={selectedElement.styles || {}} 
+                onStyleChange={updateStyle} 
+                element={selectedElement}
+              />
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setShowAdvancedCssEditor(false)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showCssLibrary} onOpenChange={setShowCssLibrary}>
+        <DialogContent className="sm:max-w-[90%] h-[90vh] max-h-[90vh] flex flex-col overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>Biblioteca de Estilos CSS</DialogTitle>
+            <DialogDescription>
+              Selecione estilos pré-definidos para aplicar ao elemento selecionado.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto">
+            {selectedElement && (
+              <CssPresetLibrary onApplyPreset={(styles) => {
+                Object.entries(styles).forEach(([property, value]) => {
+                  updateStyle(property, value);
+                });
+              }} />
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setShowCssLibrary(false)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showHtmlEditor} onOpenChange={setShowHtmlEditor}>
+        <DialogContent className="sm:max-w-[90%] h-[90vh] max-h-[90vh] flex flex-col overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>Editor de Código</DialogTitle>
+            <DialogDescription>
+              Edite diretamente o HTML, CSS e JavaScript do elemento selecionado.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto">
+            {selectedElement && (
+              <HtmlEditor
+                htmlContent={selectedElement.content || ''}
+                cssContent={selectedElement.customCss || ''}
+                jsContent={selectedElement.customJs || ''}
+                onHtmlChange={(html) => updateElementContent(selectedElement.id, { content: html })}
+                onCssChange={(css) => updateElementContent(selectedElement.id, { customCss: css })}
+                onJsChange={(js) => updateElementContent(selectedElement.id, { customJs: js })}
+              />
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setShowHtmlEditor(false)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </aside>
   );
 };
