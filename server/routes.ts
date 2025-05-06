@@ -4731,22 +4731,30 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
     }
   }
   
-  // Endpoint para criar novo registro em uma tabela
-  app.post(`${apiPrefix}/database/tables/:tableName/data`, async (req, res) => {
+  // Handler para criar um novo registro em uma tabela
+  async function handleCreateRecord(req: Request, res: Response) {
     try {
       const { tableName } = req.params;
+      const projectId = req.query.projectId ? parseInt(req.query.projectId as string, 10) : null;
       const data = req.body;
+      
+      if (!projectId) {
+        return res.status(400).json({ message: "É necessário fornecer o ID do projeto" });
+      }
+      
+      // Construir o nome completo da tabela com o prefixo do projeto
+      const fullTableName = `p${projectId}_${tableName}`;
       
       // Verificar se o tableName é válido para evitar SQL injection
       const tableCheck = await db.execute(sql`
         SELECT EXISTS (
           SELECT 1 FROM information_schema.tables 
-          WHERE table_schema = 'public' AND table_name = ${tableName}
+          WHERE table_schema = 'public' AND table_name = ${fullTableName}
         ) as exists
       `);
       
       if (!tableCheck.rows[0].exists) {
-        return res.status(404).json({ error: "Tabela não encontrada" });
+        return res.status(404).json({ error: `Tabela ${tableName} não encontrada para o projeto ${projectId}` });
       }
       
       // Construir a inserção dinâmica
@@ -4758,7 +4766,7 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
       const valuePlaceholders = columns.map((_, i) => `$${i+1}`).join(', ');
       
       const insertQuery = sql.raw(
-        `INSERT INTO "${tableName}" (${columnStr}) VALUES (${valuePlaceholders}) RETURNING *`,
+        `INSERT INTO "${fullTableName}" (${columnStr}) VALUES (${valuePlaceholders}) RETURNING *`,
         values
       );
       
@@ -4768,6 +4776,18 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
     } catch (error) {
       handleError(res, error, "Erro ao criar registro");
     }
+  }
+  
+  // Endpoint para criar novo registro em uma tabela
+  app.post(`${apiPrefix}/database/tables/:tableName/data`, handleCreateRecord);
+  
+  // Endpoint personalizado para projetos - inserir registros em uma tabela
+  app.post(`${apiPrefix}/projects/:projectId/database/tables/:tableName/data`, (req, res) => {
+    // Transferir o ID do projeto dos parâmetros para a query
+    req.query.projectId = req.params.projectId;
+    
+    // Chamar o handler de criação de registros
+    handleCreateRecord(req, res);
   });
   
   // Endpoint para atualizar um registro
