@@ -459,6 +459,8 @@ const generateHtml = (elements: Element[], includeStyles: boolean = true): strin
   return html;
 };
 
+// Helper function já definida anteriormente
+
 export const useEditorStore = create<EditorState>()(
   persist(
     (set, get) => ({
@@ -849,6 +851,201 @@ export const useEditorStore = create<EditorState>()(
           console.error('Failed to load project:', error);
           return Promise.reject(error);
         }
+      },
+      
+      // Implementação das funções de Alinhamento
+      alignElements: (elementIds, alignment) => {
+        set((state) => {
+          if (elementIds.length <= 1) return state;
+          
+          // Find min/max coordinates to determine boundaries
+          const elements = state.elements.filter(el => elementIds.includes(el.id));
+          const minX = Math.min(...elements.map(el => el.x));
+          const maxX = Math.max(...elements.map(el => el.x + el.width));
+          const minY = Math.min(...elements.map(el => el.y));
+          const maxY = Math.max(...elements.map(el => el.y + el.height));
+          const centerX = minX + (maxX - minX) / 2;
+          const centerY = minY + (maxY - minY) / 2;
+          
+          // Update element positions based on alignment
+          const newElements = state.elements.map(el => {
+            if (!elementIds.includes(el.id)) return el;
+            
+            let updates = {};
+            switch(alignment) {
+              case 'left':
+                updates = { x: minX };
+                break;
+              case 'center':
+                updates = { x: centerX - el.width / 2 };
+                break;
+              case 'right':
+                updates = { x: maxX - el.width };
+                break;
+              case 'top':
+                updates = { y: minY };
+                break;
+              case 'middle':
+                updates = { y: centerY - el.height / 2 };
+                break;
+              case 'bottom':
+                updates = { y: maxY - el.height };
+                break;
+            }
+            
+            return { ...el, ...updates };
+          });
+          
+          return { elements: newElements, unsavedChanges: true };
+        });
+        
+        // Create a snapshot for history
+        get().createSnapshot();
+      },
+
+      // Implementação da distribuição de elementos
+      distributeElements: (elementIds, distribution) => {
+        set((state) => {
+          if (elementIds.length <= 2) return state;
+          
+          const elements = state.elements.filter(el => elementIds.includes(el.id));
+          
+          // Sort elements by position
+          const sortedElements = distribution === 'horizontal'
+            ? [...elements].sort((a, b) => a.x - b.x)
+            : [...elements].sort((a, b) => a.y - b.y);
+          
+          // Calculate total space and spacing
+          const firstElement = sortedElements[0];
+          const lastElement = sortedElements[sortedElements.length - 1];
+          let totalSpace;
+          
+          if (distribution === 'horizontal') {
+            totalSpace = (lastElement.x + lastElement.width) - firstElement.x;
+            const usedSpace = sortedElements.reduce((sum, el) => sum + el.width, 0);
+            const availableSpace = totalSpace - usedSpace;
+            const spacing = availableSpace / (sortedElements.length - 1);
+            
+            // Set new positions with equal spacing
+            let currentX = firstElement.x + firstElement.width + spacing;
+            const newElements = state.elements.map(el => {
+              if (!elementIds.includes(el.id)) return el;
+              if (el.id === firstElement.id || el.id === lastElement.id) return el;
+              
+              const updatedEl = { ...el, x: currentX };
+              currentX += el.width + spacing;
+              return updatedEl;
+            });
+            
+            return { elements: newElements, unsavedChanges: true };
+          } else {  // vertical distribution
+            totalSpace = (lastElement.y + lastElement.height) - firstElement.y;
+            const usedSpace = sortedElements.reduce((sum, el) => sum + el.height, 0);
+            const availableSpace = totalSpace - usedSpace;
+            const spacing = availableSpace / (sortedElements.length - 1);
+            
+            // Set new positions with equal spacing
+            let currentY = firstElement.y + firstElement.height + spacing;
+            const newElements = state.elements.map(el => {
+              if (!elementIds.includes(el.id)) return el;
+              if (el.id === firstElement.id || el.id === lastElement.id) return el;
+              
+              const updatedEl = { ...el, y: currentY };
+              currentY += el.height + spacing;
+              return updatedEl;
+            });
+            
+            return { elements: newElements, unsavedChanges: true };
+          }
+        });
+        
+        // Create a snapshot for history
+        get().createSnapshot();
+      },
+      
+      // Implementação do agrupamento de elementos
+      groupElements: (elementIds) => {
+        set((state) => {
+          if (elementIds.length <= 1) return state;
+          
+          const elementsToGroup = state.elements.filter(el => elementIds.includes(el.id));
+          
+          // Find boundaries of the group
+          const minX = Math.min(...elementsToGroup.map(el => el.x));
+          const minY = Math.min(...elementsToGroup.map(el => el.y));
+          const maxX = Math.max(...elementsToGroup.map(el => el.x + el.width));
+          const maxY = Math.max(...elementsToGroup.map(el => el.y + el.height));
+          
+          // Create a container element for the group
+          const groupId = generateId('group');
+          const containerElement: Element = {
+            id: groupId,
+            type: ElementTypes.container,
+            name: `Grupo ${state.elements.filter(el => el.type === ElementTypes.container).length + 1}`,
+            x: minX,
+            y: minY,
+            width: maxX - minX,
+            height: maxY - minY,
+            styles: { backgroundColor: 'rgba(200, 200, 200, 0.1)', border: '1px dashed #aaa' },
+            children: elementIds,
+            visible: true,
+            zIndex: Math.min(...elementsToGroup.map(el => el.zIndex || 0)),
+            locked: false,
+            animations: [],
+            actions: [],
+            transform: { rotate: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 },
+            responsive: { mobile: {}, tablet: {} },
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          
+          // Update parent reference for all grouped elements
+          const updatedElements = state.elements.map(el => {
+            if (elementIds.includes(el.id)) {
+              return { ...el, parent: groupId };
+            }
+            return el;
+          });
+          
+          return { 
+            elements: [...updatedElements, containerElement],
+            selectedElementId: groupId,
+            unsavedChanges: true
+          };
+        });
+        
+        // Create a snapshot for history
+        get().createSnapshot();
+      },
+      
+      // Implementação do desagrupamento de elementos
+      ungroupElements: (groupId) => {
+        set((state) => {
+          const groupElement = state.elements.find(el => el.id === groupId);
+          if (!groupElement || !groupElement.children || groupElement.children.length === 0) {
+            return state;
+          }
+          
+          // Update parent reference for all grouped elements
+          const updatedElements = state.elements.map(el => {
+            if (groupElement.children?.includes(el.id)) {
+              return { ...el, parent: undefined };
+            }
+            return el;
+          });
+          
+          // Remove the group container element
+          const filteredElements = updatedElements.filter(el => el.id !== groupId);
+          
+          return { 
+            elements: filteredElements,
+            selectedElementId: null,
+            unsavedChanges: true
+          };
+        });
+        
+        // Create a snapshot for history
+        get().createSnapshot();
       },
       
       createNewProject: (name, description) => {
