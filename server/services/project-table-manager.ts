@@ -847,7 +847,9 @@ export class ProjectTableManager {
             if (!Array.isArray(value) || value.length !== 2) {
               return { success: false, error: `Valor inválido para operador 'between'. Esperado array com 2 elementos.` };
             }
-            condition = sql`${sql.identifier(field)} BETWEEN ${value[0]} AND ${value[1]}`;
+            condition = isNumericField 
+              ? sql`CAST(${sql.identifier(field)} AS NUMERIC) BETWEEN ${value[0]} AND ${value[1]}` 
+              : sql`${sql.identifier(field)} BETWEEN ${value[0]} AND ${value[1]}`;
             break;
           default:
             return { success: false, error: `Operador de filtro '${operator}' não suportado.` };
