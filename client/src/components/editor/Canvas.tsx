@@ -96,21 +96,68 @@ const Canvas = ({ viewMode, zoom }: CanvasProps) => {
     }
   };
 
-  // Helper function to handle template loading
-  const handleLoadEcommerceTemplate = useCallback(() => {
-    // Import the e-commerce template module and load it
-    import('@/lib/templates').then(({ templates }) => {
-      const ecommerceTemplates = templates.ecommerce.items;
-      if (ecommerceTemplates && ecommerceTemplates.length > 0) {
-        const template = ecommerceTemplates[0]; // Load the first e-commerce template
-        loadTemplate(template.elements);
+  // Sistema avançado de seleção e gerenciamento de templates
+  const handleTemplateSelection = useCallback((category: 'ecommerce' | 'landing' | 'blog' | 'portfolio') => {
+    // Confirmar com o usuário antes de carregar um template
+    if (elements.length > 0) {
+      const confirmResult = window.confirm(
+        "Atenção: Carregar um template substituirá todos os elementos atuais do seu projeto. Deseja continuar?"
+      );
+      
+      if (!confirmResult) {
         toast({
-          title: "Template carregado",
-          description: `O template de e-commerce ${template.name} foi carregado com sucesso.`
+          title: "Operação cancelada",
+          description: "O template não foi carregado para preservar seu trabalho atual."
         });
+        return;
       }
-    });
-  }, [loadTemplate, toast]);
+    }
+    
+    // Carregamento dinâmico com tratamento de erros robusto
+    import('@/lib/templates')
+      .then(({ templates }) => {
+        // Verificação de segurança da categoria
+        if (!templates[category] || !templates[category].items || templates[category].items.length === 0) {
+          throw new Error(`Nenhum template disponível na categoria '${category}'`);
+        }
+        
+        // Limpar o canvas antes de aplicar o template
+        clearCanvas();
+        
+        // Usar o primeiro template da categoria solicitada
+        const template = templates[category].items[0];
+        
+        // Verificação de segurança para elementos do template
+        if (!template.elements || !Array.isArray(template.elements)) {
+          throw new Error(`Template '${template.name}' possui estrutura inválida`);
+        }
+        
+        // Carregar o template no editor
+        loadTemplate(template.elements);
+        
+        // Notificação detalhada com informações relevantes
+        toast({
+          title: "Template aplicado com sucesso",
+          description: `Template '${template.name}' da categoria '${category}' foi carregado. Agora você pode personalizá-lo conforme necessário.`
+        });
+        
+        // Log para debug e auditoria
+        console.log(`Template '${template.name}' carregado com ${template.elements.length} elementos`);
+      })
+      .catch((error) => {
+        console.error('Erro detalhado ao carregar template:', error);
+        toast({
+          title: "Erro ao carregar template",
+          description: "Ocorreu um problema ao carregar o template solicitado. Por favor, tente novamente.",
+          variant: "destructive"
+        });
+      });
+  }, [elements, loadTemplate, clearCanvas, toast]);
+  
+  // Função específica para carregar template de e-commerce (mantida para compatibilidade)
+  const handleLoadEcommerceTemplate = useCallback(() => {
+    handleTemplateSelection('ecommerce');
+  }, [handleTemplateSelection]);
 
   // Function to get viewport width based on current mode
   const getPreviewWidth = () => {
@@ -407,28 +454,128 @@ const Canvas = ({ viewMode, zoom }: CanvasProps) => {
                 )}
 
                 {elements.length === 0 && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-8 bg-muted/10">
-                    <div className="mb-4">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-muted-foreground mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-                      </svg>
-                      <h3 className="text-lg font-semibold mb-1">Comece a criar seu site</h3>
-                      <p className="text-muted-foreground mb-4">Arraste elementos da biblioteca ou escolha um template</p>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-8 bg-gradient-to-b from-background to-muted/20 border-4 border-dashed border-muted-foreground/20 rounded-xl">
+                    <div className="mb-4 max-w-xl bg-background/95 p-8 rounded-xl shadow-lg border border-border">
+                      <div className="p-3 bg-primary/10 text-primary rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                      </div>
                       
-                      <div className="flex items-center justify-center gap-2">
+                      <h2 className="text-2xl font-bold mb-2">Canvas Vazio - Novo Projeto</h2>
+                      <p className="text-muted-foreground mb-6 text-sm">
+                        Este é um projeto totalmente novo, sem elementos pré-carregados.<br />
+                        Você tem liberdade total para criar seu site do zero ou aplicar templates.
+                      </p>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                        <div className="bg-secondary/40 p-4 rounded-lg text-left">
+                          <h3 className="font-semibold mb-2 flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                            </svg>
+                            Criação Manual
+                          </h3>
+                          <ul className="text-sm text-muted-foreground space-y-1">
+                            <li className="flex items-center">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                              Arraste elementos da biblioteca à esquerda
+                            </li>
+                            <li className="flex items-center">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                              Controle total sobre o design
+                            </li>
+                            <li className="flex items-center">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                              Personalize cores, fontes e estilos
+                            </li>
+                          </ul>
+                        </div>
+                        
+                        <div className="bg-secondary/40 p-4 rounded-lg text-left">
+                          <h3 className="font-semibold mb-2 flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                            </svg>
+                            Usar Templates
+                          </h3>
+                          <ul className="text-sm text-muted-foreground space-y-1">
+                            <li className="flex items-center">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                              Comece com estruturas prontas
+                            </li>
+                            <li className="flex items-center">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                              Templates otimizados por categoria
+                            </li>
+                            <li className="flex items-center">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                              Totalmente editáveis após aplicação
+                            </li>
+                          </ul>
+                        </div>
+                      </div>
+                      
+                      <div className="flex flex-wrap items-center justify-center gap-3">
                         <Button 
                           variant="default" 
-                          size="sm"
-                          onClick={handleLoadEcommerceTemplate}
-                          className="flex items-center gap-1"
+                          size="lg"
+                          onClick={() => handleTemplateSelection('ecommerce')}
+                          className="flex items-center gap-2 px-4 py-2"
                         >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                           </svg>
-                          Carregar Template E-commerce
+                          Template E-commerce
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="lg"
+                          onClick={() => handleTemplateSelection('landing')}
+                          className="flex items-center gap-2 px-4 py-2"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                          </svg>
+                          Template Landing Page
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="lg"
+                          onClick={() => {
+                            if (showAITip) setShowAITip(false);
+                            else setShowAITip(true);
+                          }}
+                          className="flex items-center gap-2 px-4 py-2"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                          </svg>
+                          Receber Dicas da IA
                         </Button>
                       </div>
                     </div>
+                    
+                    {showAITip && (
+                      <div className="mt-4 max-w-xl bg-background/95 p-6 rounded-xl shadow-lg border border-primary/20">
+                        <AIAssistant 
+                          message="Posso ajudar com sugestões para criar seu site. Como deseja começar?"
+                          onDismiss={() => setShowAITip(false)}
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -446,20 +593,66 @@ const Canvas = ({ viewMode, zoom }: CanvasProps) => {
                 <div className="mx-auto" style={getPreviewWidth()}>
                   <div className="preview-container">
                     {elements.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center h-[500px]">
-                        <div className="text-center p-8">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-muted-foreground mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                          <h3 className="text-lg font-semibold mb-2">Prévia não disponível</h3>
-                          <p className="text-muted-foreground mb-4">Você ainda não adicionou elementos ao seu site.</p>
-                          <Button 
-                            variant="default" 
-                            size="sm"
-                            onClick={handleLoadEcommerceTemplate}
-                          >
-                            Carregar Template E-commerce
-                          </Button>
+                      <div className="flex flex-col items-center justify-center h-[500px] bg-gradient-to-b from-background to-muted/10 border-4 border-dashed border-muted-foreground/20 rounded-xl">
+                        <div className="text-center p-8 max-w-xl bg-background/95 py-8 px-10 rounded-xl shadow-lg border border-border">
+                          <div className="p-3 bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" />
+                            </svg>
+                          </div>
+                          <h3 className="text-xl font-bold mb-3">Visualização em Tempo Real</h3>
+                          <p className="text-muted-foreground mb-5">Seu projeto está vazio. Adicione elementos no editor para visualizar seu site em tempo real.</p>
+                          
+                          <div className="flex flex-col gap-4 mb-6">
+                            <div className="flex items-start gap-3 text-left bg-secondary/40 p-3 rounded-lg">
+                              <div className="mt-0.5 bg-primary/10 p-1.5 rounded-md">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                </svg>
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-semibold">Visualize seu site em diferentes dispositivos</h4>
+                                <p className="text-xs text-muted-foreground">Teste como seu site ficará em dispositivos desktop, tablet e mobile.</p>
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-start gap-3 text-left bg-secondary/40 p-3 rounded-lg">
+                              <div className="mt-0.5 bg-primary/10 p-1.5 rounded-md">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                                </svg>
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-semibold">Alterações em tempo real</h4>
+                                <p className="text-xs text-muted-foreground">Todas as alterações feitas no editor serão refletidas aqui instantaneamente.</p>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center justify-center gap-3">
+                            <Button 
+                              variant="default" 
+                              size="sm"
+                              onClick={() => handleTemplateSelection('ecommerce')}
+                              className="flex items-center gap-1"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                              </svg>
+                              Template E-commerce
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleTemplateSelection('landing')}
+                              className="flex items-center gap-1"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                              </svg>
+                              Template Landing Page
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     ) : (

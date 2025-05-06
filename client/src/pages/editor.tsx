@@ -24,77 +24,122 @@ export default function Editor() {
   const { toast } = useToast();
   const [location] = useLocation();
 
-  // Load template from URL parameter if specified, or project by ID
+  // Sistema aprimorado de inicialização do editor com separação completa de contextos
+  // Esta função gerencia o carregamento de conteúdo no editor baseado na URL
   const loadTemplateFromUrl = useCallback(async () => {
-    // Parse URL parameters
+    // Análise avançada de parâmetros de URL para determinar o contexto de inicialização
     const params = new URLSearchParams(window.location.search);
     const templateType = params.get('template');
     const projectId = params.get('id');
     const isNewProject = params.get('new') === 'true';
     
-    // Se for um novo projeto, não carregue nenhum template
+    // Gerenciamento de projeto novo - SEMPRE começar com canvas totalmente vazio
     if (isNewProject) {
+      // Garantir que o editor esteja completamente vazio
+      useEditorStore.getState().clearCanvas();
+      
       const projectName = params.get('name') || 'Novo Projeto';
       document.title = `${projectName} - NextGen Site Builder`;
       
+      // Sistema de informações ao usuário sobre projeto vazio
       toast({
-        title: `Projeto: ${projectName}`,
-        description: "Comece a criar seu site arrastando elementos do painel esquerdo para o canvas. O projeto será criado sem banco de dados ou APIs."
+        title: `Projeto Vazio: ${projectName}`,
+        description: "Canvas limpo e pronto para criação. Arraste elementos da biblioteca para começar seu site do zero, sem template pré-carregado."
       });
+      
+      // Registrar no console para debug
+      console.log("Iniciando projeto totalmente vazio, sem elementos pré-carregados");
       return;
     }
     
-    // Se houver um ID de projeto, carregue o projeto existente
+    // Carregamento de projeto existente pelo ID
     if (projectId) {
       try {
+        // Limpar o editor antes de carregar o projeto para evitar conteúdo residual
+        useEditorStore.getState().clearCanvas();
+        
+        // Obter dados do projeto da API
         const response = await fetch(`/api/projects/${projectId}`);
         if (!response.ok) {
-          throw new Error("Projeto não encontrado");
+          throw new Error("Projeto não encontrado ou acesso não autorizado");
         }
         
         const project = await response.json();
-        // Assumindo que o projeto tem uma propriedade 'elements' que contém os elementos
-        loadTemplate(project.elements);
+        console.log("Projeto carregado da API:", project);
         
+        // Verificação de segurança para garantir que elementos existam
+        if (project.elements && Array.isArray(project.elements)) {
+          loadTemplate(project.elements);
+        } else {
+          // Se não houver elementos, mantém o canvas vazio
+          console.log("Projeto não contém elementos, mantendo canvas vazio");
+        }
+        
+        // Notificação de sucesso com detalhes do projeto
         toast({
-          title: "Projeto carregado",
-          description: `O projeto '${project.name}' foi carregado com sucesso.`
+          title: "Projeto carregado com sucesso",
+          description: `'${project.name}' - Criado em: ${new Date(project.createdAt).toLocaleDateString()} - ID: ${project.id}`
         });
       } catch (error) {
-        console.error('Erro ao carregar projeto:', error);
+        console.error('Erro detalhado ao carregar projeto:', error);
         toast({
           title: "Erro ao carregar projeto",
-          description: "Não foi possível carregar o projeto solicitado.",
+          description: "Não foi possível carregar o projeto solicitado. Verifique sua conexão ou permissões.",
           variant: "destructive"
         });
       }
       return;
     }
     
-    // Se for um template específico, carregue o template
-    if (templateType === 'ecommerce') {
+    // Carregamento explícito de templates - SOMENTE se solicitado
+    if (templateType && templateType !== '') {
       try {
-        const { templates } = await import('@/lib/templates');
-        const ecommerceTemplates = templates.ecommerce.items;
+        // Limpar o editor antes de aplicar o template
+        useEditorStore.getState().clearCanvas();
         
-        if (ecommerceTemplates && ecommerceTemplates.length > 0) {
-          const template = ecommerceTemplates[0];
-          loadTemplate(template.elements);
+        // Carregamento dinâmico do módulo de templates
+        const { templates } = await import('@/lib/templates');
+        
+        // Verificação de categoria de template válida
+        if (!templates[templateType]) {
+          throw new Error(`Categoria de template '${templateType}' não encontrada`);
+        }
+        
+        const categoryTemplates = templates[templateType].items;
+        
+        if (categoryTemplates && categoryTemplates.length > 0) {
+          // Usar o primeiro template da categoria especificada
+          const template = categoryTemplates[0];
           
-          toast({
-            title: "Template carregado",
-            description: `O template de e-commerce ${template.name} foi carregado com sucesso.`
-          });
+          // Verificação de segurança para elementos do template
+          if (template.elements && Array.isArray(template.elements)) {
+            loadTemplate(template.elements);
+            
+            // Notificação detalhada sobre o template carregado
+            toast({
+              title: "Template carregado explicitamente",
+              description: `Template '${template.name}' da categoria '${templateType}' aplicado com sucesso.`
+            });
+          } else {
+            throw new Error("Estrutura de template inválida");
+          }
+        } else {
+          throw new Error(`Nenhum template disponível na categoria '${templateType}'`);
         }
       } catch (error) {
-        console.error('Erro ao carregar template:', error);
+        console.error('Erro detalhado ao carregar template:', error);
         toast({
           title: "Erro ao carregar template",
-          description: "Não foi possível carregar o template solicitado.",
+          description: "Não foi possível carregar o template solicitado. Template não encontrado ou corrompido.",
           variant: "destructive"
         });
       }
+      return;
     }
+    
+    // Se nenhuma condição acima for atendida, inicia com canvas vazio (comportamento padrão)
+    console.log("Nenhum parâmetro específico fornecido, iniciando editor com canvas vazio");
+    useEditorStore.getState().clearCanvas();
   }, [loadTemplate, toast]);
 
   // Run once when the component mounts
