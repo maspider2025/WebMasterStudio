@@ -37,6 +37,7 @@ export interface Element {
   styles?: Record<string, string>;
   parent?: string;
   children?: string[];
+  fieldOrder?: string[];  // Ordem personalizada dos campos filhos (usado para drag-and-drop)
   zIndex?: number;
   locked?: boolean;
   visible?: boolean;

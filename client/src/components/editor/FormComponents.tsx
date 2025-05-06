@@ -550,31 +550,40 @@ export const FormComponent = ({ element, isEditMode, onChange }: FormFieldProps)
   
   // Atualiza a ordem dos campos quando necessário
   useEffect(() => {
-    if (element.children && fieldOrder.length === 0) {
+    // Prioridade 1: Usar fieldOrder do elemento quando disponível
+    if (element.fieldOrder && element.fieldOrder.length > 0 && fieldOrder.length === 0) {
+      setFieldOrder(element.fieldOrder);
+    }
+    // Prioridade 2: Usar children como fallback quando fieldOrder estiver vazio
+    else if (element.children && fieldOrder.length === 0) {
       setFieldOrder(element.children);
     }
-  }, [element.children, fieldOrder]);
+  }, [element.children, element.fieldOrder, fieldOrder]);
   
   // Handler para quando um campo é movido para uma nova posição via drag-and-drop
   const handleFieldMove = (fieldId: string, targetIndex: number) => {
     if (!element.children) return;
     
-    // Remove o campo da posição atual
-    const currentOrder = [...element.children];
-    const currentIndex = currentOrder.indexOf(fieldId);
+    // Identifica a fonte de ordem atual (fieldOrder se disponível, ou children)
+    const orderSource = element.fieldOrder && element.fieldOrder.length > 0 
+      ? [...element.fieldOrder] 
+      : [...element.children];
+    
+    const currentIndex = orderSource.indexOf(fieldId);
     
     if (currentIndex === -1) return;  // Campo não encontrado
     
     // Cria nova ordem com o campo na posição de destino
-    currentOrder.splice(currentIndex, 1);
-    currentOrder.splice(targetIndex, 0, fieldId);
+    orderSource.splice(currentIndex, 1);
+    orderSource.splice(targetIndex, 0, fieldId);
     
-    // Atualiza a ordem dos campos
-    setFieldOrder(currentOrder);
+    // Atualiza o estado local
+    setFieldOrder(orderSource);
     
-    // Atualiza o elemento do formulário com a nova ordem de campos
+    // Atualiza ambos: children para compatibilidade e fieldOrder para ordem personalizada
     updateElement(element.id, {
-      children: currentOrder
+      children: element.children,  // Mantém a lista de filhos intacta
+      fieldOrder: orderSource     // Atualiza apenas a ordem
     });
   };
   
@@ -593,8 +602,15 @@ export const FormComponent = ({ element, isEditMode, onChange }: FormFieldProps)
       children: updatedChildren
     });
     
-    // Atualiza a ordem dos campos
-    setFieldOrder(updatedChildren);
+    // Atualiza a ordem dos campos se estiver definida
+    if (element.fieldOrder) {
+      const updatedOrder = (element.fieldOrder || []).filter(id => id !== fieldId);
+      updateElement(element.id, {
+        fieldOrder: updatedOrder
+      });
+    } else {
+      setFieldOrder(updatedChildren);
+    }
     
     // Remove o elemento do editor
     removeElement(fieldId);
@@ -612,7 +628,9 @@ export const FormComponent = ({ element, isEditMode, onChange }: FormFieldProps)
       parent: element.id,
       htmlAttributes: {
         ...field.htmlAttributes,
-        name: `${field.htmlAttributes?.name || ''}_copy` 
+        name: `${field.htmlAttributes?.name || ''}_copy`,
+        id: `${field.htmlAttributes?.id || ''}_copy`,
+        'data-field-id': newFieldId
       }
     };
     
@@ -628,7 +646,14 @@ export const FormComponent = ({ element, isEditMode, onChange }: FormFieldProps)
     });
     
     // Atualiza a ordem dos campos
-    setFieldOrder(updatedChildren);
+    if (element.fieldOrder) {
+      const updatedOrder = [...element.fieldOrder, newFieldId];
+      updateElement(element.id, {
+        fieldOrder: updatedOrder
+      });
+    } else {
+      setFieldOrder(updatedChildren);
+    }
   };
   
   // Handler para editar as propriedades de um campo
@@ -645,9 +670,23 @@ export const FormComponent = ({ element, isEditMode, onChange }: FormFieldProps)
   const renderOrderedFields = () => {
     if (!element.children || element.children.length === 0) return [];
     
-    // Usa a ordem personalizada se disponível, ou a ordem padrão dos children
-    const orderedIds = fieldOrder.length > 0 ? fieldOrder : element.children;
+    // Define a fonte da ordem dos campos
+    let orderedIds: string[] = [];
     
+    // Prioridade 1: Usar element.fieldOrder se existir
+    if (element.fieldOrder && element.fieldOrder.length > 0) {
+      orderedIds = element.fieldOrder;
+    }
+    // Prioridade 2: Usar o estado local fieldOrder
+    else if (fieldOrder.length > 0) {
+      orderedIds = fieldOrder;
+    }
+    // Prioridade 3: Usar a lista de children padrão
+    else {
+      orderedIds = element.children;
+    }
+    
+    // Filtra apenas campos válidos (que ainda existem no editor)
     return orderedIds
       .map(childId => elements.find(el => el.id === childId))
       .filter(Boolean) as Element[];
