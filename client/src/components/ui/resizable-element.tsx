@@ -3,6 +3,13 @@ import { ElementTypes } from "@/lib/element-types";
 import { useEditorStore } from "@/lib/editor-store";
 import { Element } from "@/lib/editor-store";
 import { useRef, useEffect } from "react";
+import {
+  FormComponent,
+  FormTextField,
+  FormSelectField,
+  FormCheckboxField,
+  FormSubmitButton
+} from "@/components/editor/FormComponents";
 
 interface ResizableElementProps {
   element: Element;
@@ -11,7 +18,7 @@ interface ResizableElementProps {
 }
 
 const ResizableElement = ({ element, isSelected, onClick }: ResizableElementProps) => {
-  const { updateElementSize } = useEditorStore();
+  const { updateElementSize, elements } = useEditorStore();
   const elementRef = useRef<HTMLDivElement>(null);
   
   const [{ isDragging }, drag] = useDrag(() => ({
@@ -108,28 +115,27 @@ const ResizableElement = ({ element, isSelected, onClick }: ResizableElementProp
         return element.content || 'Text content';
       case ElementTypes.heading:
         return <h1>{element.content || 'Heading'}</h1>;
-      case ElementTypes.button:
-        return <button className="px-4 py-2 bg-primary text-primary-foreground rounded">{element.content || 'Button'}</button>;
       case ElementTypes.image:
         return <img src={element.src || 'https://via.placeholder.com/150'} alt={element.alt || 'Image'} className="w-full h-full object-cover" />;
       case ElementTypes.form:
-        return (
-          <div className="w-full h-full flex flex-col gap-3 p-4 overflow-auto">
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium">Nome</label>
-              <input type="text" className="border rounded p-2" placeholder="Seu nome" />
-            </div>
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium">Email</label>
-              <input type="email" className="border rounded p-2" placeholder="seu@email.com" />
-            </div>
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium">Mensagem</label>
-              <textarea className="border rounded p-2 min-h-[80px]" placeholder="Digite sua mensagem..."></textarea>
-            </div>
-            <button className="mt-2 bg-primary text-primary-foreground py-2 px-4 rounded">Enviar</button>
-          </div>
-        );
+        // Usar o novo componente FormComponent para renderizar formulários
+        return <FormComponent element={element} isEditMode={false} />;
+      case ElementTypes.input:
+        // Usar o novo componente FormTextField para renderizar inputs
+        return <FormTextField element={element} isEditMode={false} />;
+      case ElementTypes.select:
+        // Usar o novo componente FormSelectField para renderizar selects
+        return <FormSelectField element={element} isEditMode={false} />;
+      case ElementTypes.checkbox:
+        // Usar o novo componente FormCheckboxField para renderizar checkboxes
+        return <FormCheckboxField element={element} isEditMode={false} />;
+      case ElementTypes.button:
+        // Se for um botão em um formulário, usar FormSubmitButton
+        if (element.parent && elements?.find(el => el.id === element.parent)?.type === ElementTypes.form) {
+          return <FormSubmitButton element={element} isEditMode={false} />;
+        }
+        return <button className="px-4 py-2 bg-primary text-primary-foreground rounded">{element.content || 'Button'}</button>;
+
       case ElementTypes.productCard:
         return (
           <div className="h-full w-full flex flex-col overflow-hidden">
