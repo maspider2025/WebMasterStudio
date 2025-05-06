@@ -14,6 +14,96 @@ const stripeInstance = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.ST
   apiVersion: "2023-10-16",
 }) : null;
 
+// Rota para criação de tabelas de banco de dados
+async function handleCreateDatabaseTable(req: Request, res: Response) {
+  try {
+    const { name, description, generateApi, columns } = req.body;
+    
+    if (!name || !columns || !Array.isArray(columns) || columns.length === 0) {
+      return res.status(400).json({
+        message: 'Nome da tabela e colunas são obrigatórios'
+      });
+    }
+    
+    // Validar nome da tabela
+    if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(name)) {
+      return res.status(400).json({
+        message: 'Nome da tabela inválido. Use apenas letras, números e underscore, começando com uma letra.'
+      });
+    }
+    
+    // Validar colunas
+    let hasPrimaryKey = false;
+    for (const column of columns) {
+      if (!column.name || !column.type) {
+        return res.status(400).json({
+          message: 'Todas as colunas devem ter nome e tipo'
+        });
+      }
+      
+      if (column.primary) {
+        hasPrimaryKey = true;
+      }
+    }
+    
+    if (!hasPrimaryKey) {
+      return res.status(400).json({
+        message: 'A tabela deve ter pelo menos uma coluna como chave primária'
+      });
+    }
+    
+    // Gerar SQL para criar a tabela
+    let createTableSQL = `CREATE TABLE ${name} (\n`;
+    
+    const columnDefs = columns.map(column => {
+      let columnDef = `  ${column.name} ${mapTypeToSQL(column.type)}`;
+      
+      if (column.notNull) {
+        columnDef += ' NOT NULL';
+      }
+      
+      if (column.primary) {
+        columnDef += ' PRIMARY KEY';
+      }
+      
+      if (column.defaultValue) {
+        columnDef += ` DEFAULT ${formatSQLValue(column.defaultValue, column.type)}`;
+      }
+      
+      return columnDef;
+    });
+    
+    createTableSQL += columnDefs.join(',\n');
+    createTableSQL += '\n);';
+    
+    // Execute SQL para criar a tabela
+    await pool.query(createTableSQL);
+    
+    // Registrar no sistema de metadados
+    // TODO: Implementar registro em tabela de metadados para gerenciamento visual
+    
+    // Gerar API dinamicamente se solicitado
+    if (generateApi) {
+      // TODO: Implementar geração dinâmica de API
+      // Isso será feito usando o api-generator.ts
+    }
+    
+    return res.status(201).json({
+      message: `Tabela ${name} criada com sucesso`,
+      sql: createTableSQL,
+      name,
+      generateApi
+    });
+    
+  } catch (error) {
+    console.error('Erro ao criar tabela:', error);
+    return res.status(500).json({
+      message: 'Erro ao criar tabela no banco de dados',
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // PayPal routes
   app.get("/paypal/setup", async (req, res) => {
