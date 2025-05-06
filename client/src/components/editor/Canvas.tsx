@@ -87,35 +87,58 @@ const Canvas = ({ viewMode, zoom }: CanvasProps) => {
   };
 
   return (
-    <div className="flex-1 overflow-auto bg-secondary flex items-center justify-center p-4">
-      <div 
-        id="editor-canvas"
-        ref={drop}
-        className="canvas-grid w-full max-w-5xl bg-white shadow-xl relative overflow-y-auto"
-        style={{ 
-          width: getViewModeWidth(),
-          minHeight: 600,
-          maxHeight: 800,
-          transform: `scale(${zoom / 100})`,
-          transformOrigin: 'center top'
-        }}
-      >
-        {/* Render the elements */}
-        {elements.map((element) => (
-          <ResizableElement
-            key={element.id}
-            element={element}
-            isSelected={element.id === selectedElementId}
-            onClick={() => selectElement(element.id)}
-          />
-        ))}
+    <div className="flex-1 overflow-auto bg-secondary flex flex-col items-center justify-center p-4">
+      <div className="w-full max-w-5xl mb-3 px-4 py-2 bg-background border border-border rounded-lg shadow-sm flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <div className="flex space-x-1.5">
+            <div className="h-3 w-3 rounded-full bg-red-500"></div>
+            <div className="h-3 w-3 rounded-full bg-yellow-500"></div>
+            <div className="h-3 w-3 rounded-full bg-green-500"></div>
+          </div>
+          <div className="text-xs font-medium text-muted-foreground bg-secondary rounded-md px-2 py-1">
+            {viewMode === 'desktop' ? 'Visualização Desktop' : viewMode === 'tablet' ? 'Visualização Tablet' : 'Visualização Mobile'}  
+          </div>
+        </div>
+        <div className="text-xs text-muted-foreground">nextgen-sitebuilder.replit.app</div>
+        <div className="text-xs font-medium text-muted-foreground bg-secondary rounded-md px-2 py-1">
+          Zoom: {zoom}%
+        </div>
+      </div>
+
+      <div className="relative w-full max-w-5xl bg-muted rounded-lg shadow-lg p-4 border border-border">
+        <div 
+          id="editor-canvas"
+          ref={drop}
+          className="canvas-grid w-full bg-white shadow-xl relative overflow-y-auto mx-auto rounded-md"
+          style={{ 
+            width: getViewModeWidth(),
+            minHeight: 600,
+            maxHeight: 800,
+            transform: `scale(${zoom / 100})`,
+            transformOrigin: 'center top'
+          }}
+        >
+          {/* Render the elements */}
+          {elements.map((element) => (
+            <ResizableElement
+              key={element.id}
+              element={element}
+              isSelected={element.id === selectedElementId}
+              onClick={() => selectElement(element.id)}
+            />
+          ))}
+          
+          {showAITip && elements.length > 0 && (
+            <AIAssistant 
+              message="Adicione uma seção de galeria para mostrar seus produtos em destaque."
+              onDismiss={() => setShowAITip(false)}
+            />
+          )}
+        </div>
         
-        {showAITip && elements.length > 0 && (
-          <AIAssistant 
-            message="Adicione uma seção de galeria para mostrar seus produtos em destaque."
-            onDismiss={() => setShowAITip(false)}
-          />
-        )}
+        <div className="absolute bottom-2 right-2 bg-background border border-border rounded-md px-3 py-1.5 shadow-sm text-xs font-medium text-muted-foreground">
+          Editor NextGen Site Builder
+        </div>
       </div>
     </div>
   );

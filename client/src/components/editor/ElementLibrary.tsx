@@ -27,6 +27,7 @@ const categoriesMap: Record<ElementCategory, { title: string, items: ElementType
       elementTypes.flexbox,
       elementTypes.section,
       elementTypes.divider,
+      elementTypes.footer,
     ],
   },
   forms: {
@@ -42,9 +43,10 @@ const categoriesMap: Record<ElementCategory, { title: string, items: ElementType
     title: "E-commerce",
     items: [
       elementTypes.productCard,
+      elementTypes.productGallery,
       elementTypes.cart,
       elementTypes.checkout,
-      elementTypes.productGallery,
+      elementTypes.carousel,
     ],
   },
   media: {
@@ -53,7 +55,6 @@ const categoriesMap: Record<ElementCategory, { title: string, items: ElementType
       elementTypes.image,
       elementTypes.video,
       elementTypes.icon,
-      elementTypes.carousel,
     ],
   },
 };
