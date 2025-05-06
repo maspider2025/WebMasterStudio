@@ -1,4 +1,4 @@
-import type { Express, Request, Response } from "express";
+import express, { type Express, type Request, type Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertUserSchema, insertProjectSchema, insertPageSchema, insertElementSchema, insertProductSchema, insertProductCategorySchema, insertProductVariantSchema, insertCartSchema, insertCartItemSchema, insertReviewSchema, insertWishlistSchema, insertWishlistItemSchema, insertDiscountSchema, insertProductTagSchema, insertProductTagRelationSchema, insertShippingMethodSchema, insertInventorySchema, insertInventoryHistorySchema, projectDatabases, projectApis, projectDatabasesInsertSchema, projectApisInsertSchema } from "@shared/schema";
@@ -5182,38 +5182,87 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
     }
   });
 
-  // Nova implementação direta para criar tabela vinculada a um projeto
-  app.post(`${apiPrefix}/projects/:projectId/database/tables`, async (req, res) => {
+  // Endpoint para listar tabelas de um projeto específico
+  app.get(`${apiPrefix}/p/:projectId/tables`, express.json(), async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId, 10);
+      
+      if (!projectId || isNaN(projectId)) {
+        return res.status(400).json({ message: "ID do projeto inválido" });
+      }
+      
+      // Buscar tabelas vinculadas a este projeto
+      const projectTables = await db.query.projectDatabases.findMany({
+        where: eq(schema.projectDatabases.projectId, projectId)
+      });
+      
+      // Para cada tabela, obter o número de registros
+      const tablesWithCounts = await Promise.all(projectTables.map(async (table) => {
+        try {
+          const countQuery = sql`SELECT COUNT(*) as count FROM ${sql.identifier(table.tableName)}`;
+          const countResult = await db.execute(countQuery);
+          const rowCount = parseInt(countResult.rows[0]?.count || '0', 10);
+          
+          return {
+            id: table.id,
+            name: table.displayName,
+            tableName: table.tableName,
+            description: table.description || '',
+            rowCount,
+            createdAt: table.createdAt,
+            updatedAt: table.updatedAt
+          };
+        } catch (err) {
+          // Se houver erro ao contar, manter o valor zero
+          return {
+            id: table.id,
+            name: table.displayName,
+            tableName: table.tableName,
+            description: table.description || '',
+            rowCount: 0,
+            createdAt: table.createdAt,
+            updatedAt: table.updatedAt
+          };
+        }
+      }));
+      
+      res.json({
+        success: true,
+        projectId,
+        tables: tablesWithCounts
+      });
+    } catch (error) {
+      console.error('Erro ao listar tabelas do projeto:', error);
+      res.status(500).json({ 
+        success: false,
+        message: 'Erro ao listar tabelas do projeto', 
+        error: String(error) 
+      });
+    }
+  });
+  
+  // Endpoint de criação de tabela para projetos - versão final
+  app.post(`${apiPrefix}/p/:projectId/tables`, express.json(), async (req, res) => {
     try {
       console.log('====================================================');
-      console.log('Endpoint de criação de tabela para projeto específico');
-      console.log('Corpo da requisição BRUTO:', JSON.stringify(req.body));
-      console.log('typeof req.body:', typeof req.body);
-      console.log('body é objeto:', req.body === Object(req.body));
-      console.log('keys:', Object.keys(req.body || {}));
-      console.log('Headers completos:', req.headers);
-      console.log('Content-Type:', req.headers['content-type']);
-      console.log('Content-Length:', req.headers['content-length']);
+      console.log('Criando tabela para projeto');
+      console.log('Corpo JSON:', JSON.stringify(req.body, null, 2));
       
-      // Extrair dados da requisição
       const projectId = parseInt(req.params.projectId, 10);
       const { tableName, columns } = req.body;
       
-      console.log(`Criando tabela '${tableName}' para projeto ${projectId}`);
-      console.log('Colunas:', columns);
-      
       // Validações básicas
-      if (!projectId) {
+      if (!projectId || isNaN(projectId)) {
         return res.status(400).json({ message: "ID do projeto inválido" });
       }
       
       if (!tableName || !columns || !Array.isArray(columns) || columns.length === 0) {
-        console.log('Falha na validação:');
+        console.log('Validação falhou:');
         console.log('- tableName:', tableName);
         console.log('- columns existe:', !!columns);
         console.log('- columns é array:', Array.isArray(columns));
         console.log('- columns length:', columns ? columns.length : 'N/A');
-        return res.status(400).json({ message: "Nome da tabela e definição de colunas são obrigatórios" });
+        return res.status(400).json({ message: "Nome da tabela e colunas são obrigatórios" });
       }
       
       // Construir o nome completo da tabela com o prefixo do projeto
@@ -5287,11 +5336,11 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
       try {
         // Gerar API paths para CRUD
         const crudEndpoints = [
-          { method: 'GET', path: `/api/data/${tableName}`, description: `Listar todos os registros de ${tableName}` },
-          { method: 'GET', path: `/api/data/${tableName}/:id`, description: `Obter registro específico de ${tableName}` },
-          { method: 'POST', path: `/api/data/${tableName}`, description: `Criar novo registro em ${tableName}` },
-          { method: 'PUT', path: `/api/data/${tableName}/:id`, description: `Atualizar registro em ${tableName}` },
-          { method: 'DELETE', path: `/api/data/${tableName}/:id`, description: `Excluir registro em ${tableName}` }
+          { method: 'GET', path: `/api/p/${projectId}/data/${tableName}`, description: `Listar todos os registros de ${tableName}` },
+          { method: 'GET', path: `/api/p/${projectId}/data/${tableName}/:id`, description: `Obter registro específico de ${tableName}` },
+          { method: 'POST', path: `/api/p/${projectId}/data/${tableName}`, description: `Criar novo registro em ${tableName}` },
+          { method: 'PUT', path: `/api/p/${projectId}/data/${tableName}/:id`, description: `Atualizar registro em ${tableName}` },
+          { method: 'DELETE', path: `/api/p/${projectId}/data/${tableName}/:id`, description: `Excluir registro em ${tableName}` }
         ];
         
         for (const endpoint of crudEndpoints) {
@@ -5319,7 +5368,7 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
       
     } catch (error) {
       console.error('Erro ao criar tabela para projeto:', error);
-      res.status(500).json({ message: 'Erro ao criar tabela para o projeto' });
+      res.status(500).json({ message: 'Erro ao criar tabela para o projeto', error: String(error) });
     }
   });
 
