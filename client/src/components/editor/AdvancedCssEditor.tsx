@@ -148,52 +148,79 @@ const AdvancedCssEditor: React.FC<AdvancedCssEditorProps> = ({ styles, onStyleCh
     { label: '100', value: '100' },
     { label: '1000', value: '1000' },
     { label: '-1', value: '-1' },
-    { label: '-10', value: '-10' },
   ];
   
-  const opacityPresets = [
-    { label: 'Transparente', value: '0' },
-    { label: '25%', value: '0.25' },
-    { label: '50%', value: '0.5' },
-    { label: '75%', value: '0.75' },
-    { label: '90%', value: '0.9' },
-    { label: 'Sólido', value: '1' },
+  const flexDirectionPresets = [
+    { label: 'Linha', value: 'row' },
+    { label: 'Coluna', value: 'column' },
+    { label: 'Linha reversa', value: 'row-reverse' },
+    { label: 'Coluna reversa', value: 'column-reverse' },
+  ];
+  
+  const flexWrapPresets = [
+    { label: 'Não quebrar', value: 'nowrap' },
+    { label: 'Quebrar', value: 'wrap' },
+    { label: 'Quebrar reverso', value: 'wrap-reverse' },
+  ];
+  
+  const justifyContentPresets = [
+    { label: 'Início', value: 'flex-start' },
+    { label: 'Fim', value: 'flex-end' },
+    { label: 'Centro', value: 'center' },
+    { label: 'Entre', value: 'space-between' },
+    { label: 'Em volta', value: 'space-around' },
+    { label: 'Igual', value: 'space-evenly' },
+  ];
+  
+  const alignItemsPresets = [
+    { label: 'Início', value: 'flex-start' },
+    { label: 'Fim', value: 'flex-end' },
+    { label: 'Centro', value: 'center' },
+    { label: 'Esticado', value: 'stretch' },
+    { label: 'Linha de base', value: 'baseline' },
+  ];
+  
+  const alignContentPresets = [
+    { label: 'Início', value: 'flex-start' },
+    { label: 'Fim', value: 'flex-end' },
+    { label: 'Centro', value: 'center' },
+    { label: 'Entre', value: 'space-between' },
+    { label: 'Em volta', value: 'space-around' },
+    { label: 'Esticado', value: 'stretch' },
   ];
   
   const borderStylePresets = [
-    { label: 'Nenhuma', value: 'none' },
-    { label: 'Sólida', value: 'solid' },
-    { label: 'Tracejada', value: 'dashed' },
-    { label: 'Pontilhada', value: 'dotted' },
-    { label: 'Dupla', value: 'double' },
-    { label: 'Sulcada', value: 'groove' },
+    { label: 'Nenhum', value: 'none' },
+    { label: 'Sólido', value: 'solid' },
+    { label: 'Tracejado', value: 'dashed' },
+    { label: 'Pontilhado', value: 'dotted' },
+    { label: 'Duplo', value: 'double' },
+    { label: 'Entalhe', value: 'groove' },
     { label: 'Cume', value: 'ridge' },
-    { label: 'Inserida', value: 'inset' },
-    { label: 'Embutida', value: 'outset' },
+    { label: 'Interno', value: 'inset' },
+    { label: 'Externo', value: 'outset' },
   ];
   
   const boxShadowPresets = [
-    { label: 'Nenhuma', value: 'none' },
-    { label: 'Suave', value: '0 2px 4px rgba(0,0,0,0.1)' },
-    { label: 'Média', value: '0 4px 8px rgba(0,0,0,0.12), 0 2px 4px rgba(0,0,0,0.08)' },
-    { label: 'Forte', value: '0 15px 30px 0 rgba(0,0,0,0.11), 0 5px 15px 0 rgba(0,0,0,0.08)' },
-    { label: 'Elevada', value: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)' },
-    { label: 'Interna', value: 'inset 0 2px 4px 0 rgba(0,0,0,0.06)' },
+    { label: 'Nenhum', value: 'none' },
+    { label: 'Pequena', value: '0 2px 4px rgba(0,0,0,0.1)' },
+    { label: 'Média', value: '0 4px 8px rgba(0,0,0,0.12)' },
+    { label: 'Grande', value: '0 8px 16px rgba(0,0,0,0.14)' },
+    { label: 'Extra grande', value: '0 12px 24px rgba(0,0,0,0.2)' },
+    { label: 'Interna', value: 'inset 0 2px 4px rgba(0,0,0,0.1)' },
   ];
   
   const textShadowPresets = [
-    { label: 'Nenhuma', value: 'none' },
-    { label: 'Suave', value: '1px 1px 2px rgba(0,0,0,0.1)' },
+    { label: 'Nenhum', value: 'none' },
+    { label: 'Sutil', value: '1px 1px 2px rgba(0,0,0,0.1)' },
     { label: 'Média', value: '2px 2px 4px rgba(0,0,0,0.2)' },
     { label: 'Forte', value: '3px 3px 6px rgba(0,0,0,0.3)' },
-    { label: 'Neon', value: '0 0 5px #fff, 0 0 10px #fff, 0 0 15px #0073e6, 0 0 20px #0073e6' },
-    { label: 'Relevo', value: '2px 2px 0px #ffffff, -2px -2px 0px #cccccc' },
+    { label: 'Neon', value: '0 0 5px #fff, 0 0 10px #0ff' },
   ];
   
   const transformPresets = [
-    { label: 'Nenhuma', value: 'none' },
+    { label: 'Nenhum', value: 'none' },
     { label: 'Rotação 45°', value: 'rotate(45deg)' },
-    { label: 'Rotação -45°', value: 'rotate(-45deg)' },
     { label: 'Rotação 90°', value: 'rotate(90deg)' },
     { label: 'Escala 1.5x', value: 'scale(1.5)' },
     { label: 'Escala 0.8x', value: 'scale(0.8)' },
@@ -242,59 +269,7 @@ const AdvancedCssEditor: React.FC<AdvancedCssEditorProps> = ({ styles, onStyleCh
     { label: 'Inverter cores', value: 'invert(100%)' },
     { label: 'Sombra drop', value: 'drop-shadow(4px 4px 4px rgba(0,0,0,0.5))' },
   ];
-  
-  // Funções para atualizar os estilos
-  const updateFromPreset = (property: string, value: string) => {
-    onStyleChange(property, value);
-  };
-  
-  const updateUnitValue = (property: string, value: string, unit: string) => {
-    if (!isNaN(parseFloat(value))) {
-      onStyleChange(property, `${value}${unit}`);
-    }
-  };
-  
-  const updateColorValue = (property: string, value: string) => {
-    onStyleChange(property, value);
-  };
-  
-  // Geração do código CSS
-  const generateCssCode = () => {
-    let cssString = '';
-    
-    if (styles) {
-      Object.entries(styles).forEach(([prop, value]) => {
-        if (value) {
-          // Converter camelCase para kebab-case (CSS padrão)
-          const cssProp = prop.replace(/([A-Z])/g, '-$1').toLowerCase();
-          cssString += `${cssProp}: ${value};\n`;
-        }
-      });
-    }
-    
-    return cssString;
-  };
-  
-  const applyCssCode = () => {
-    // Aqui processamos o código CSS digitado manualmente
-    // Dividimos por linhas e então por propriedade/valor
-    const lines = cssCode.split(';').filter(line => line.trim() !== '');
-    
-    lines.forEach(line => {
-      const [prop, value] = line.split(':').map(part => part.trim());
-      if (prop && value) {
-        // Converter kebab-case para camelCase
-        const camelProp = prop.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
-        onStyleChange(camelProp, value);
-      }
-    });
-  };
-  
-  // Atualizar o código CSS quando os estilos mudarem
-  React.useEffect(() => {
-    setCssCode(generateCssCode());
-  }, [styles]);
-  
+
   // Paleta de cores expandida com mais opções e organizada por categorias
   const colorPalette = {
     basic: [
@@ -354,26 +329,6 @@ const AdvancedCssEditor: React.FC<AdvancedCssEditorProps> = ({ styles, onStyleCh
       { color: '#ff8f00', name: 'Âmbar 800' },
       { color: '#ff6f00', name: 'Âmbar 900' },
     ],
-    purple: [
-      { color: '#f3e5f5', name: 'Roxo 50' },
-      { color: '#e1bee7', name: 'Roxo 100' },
-      { color: '#ab47bc', name: 'Roxo 400' },
-      { color: '#9c27b0', name: 'Roxo 500' },
-      { color: '#8e24aa', name: 'Roxo 600' },
-      { color: '#7b1fa2', name: 'Roxo 700' },
-      { color: '#6a1b9a', name: 'Roxo 800' },
-      { color: '#4a148c', name: 'Roxo 900' },
-    ],
-    teal: [
-      { color: '#e0f2f1', name: 'Turquesa 50' },
-      { color: '#b2dfdb', name: 'Turquesa 100' },
-      { color: '#26a69a', name: 'Turquesa 400' },
-      { color: '#009688', name: 'Turquesa 500' },
-      { color: '#00897b', name: 'Turquesa 600' },
-      { color: '#00796b', name: 'Turquesa 700' },
-      { color: '#00695c', name: 'Turquesa 800' },
-      { color: '#004d40', name: 'Turquesa 900' },
-    ],
     orange: [
       { color: '#fff3e0', name: 'Laranja 50' },
       { color: '#ffe0b2', name: 'Laranja 100' },
@@ -383,6 +338,16 @@ const AdvancedCssEditor: React.FC<AdvancedCssEditorProps> = ({ styles, onStyleCh
       { color: '#f57c00', name: 'Laranja 700' },
       { color: '#ef6c00', name: 'Laranja 800' },
       { color: '#e65100', name: 'Laranja 900' },
+    ],
+    purple: [
+      { color: '#f3e5f5', name: 'Roxo 50' },
+      { color: '#e1bee7', name: 'Roxo 100' },
+      { color: '#ab47bc', name: 'Roxo 400' },
+      { color: '#9c27b0', name: 'Roxo 500' },
+      { color: '#8e24aa', name: 'Roxo 600' },
+      { color: '#7b1fa2', name: 'Roxo 700' },
+      { color: '#6a1b9a', name: 'Roxo 800' },
+      { color: '#4a148c', name: 'Roxo 900' },
     ],
     pink: [
       { color: '#fce4ec', name: 'Rosa 50' },
@@ -396,6 +361,59 @@ const AdvancedCssEditor: React.FC<AdvancedCssEditorProps> = ({ styles, onStyleCh
     ],
   };
 
+  // Funções para atualizar os estilos
+  const updateFromPreset = (property: string, value: string) => {
+    onStyleChange(property, value);
+  };
+  
+  const updateUnitValue = (property: string, value: string, unit: string) => {
+    if (!isNaN(parseFloat(value))) {
+      onStyleChange(property, `${value}${unit}`);
+    }
+  };
+  
+  const updateColorValue = (property: string, value: string) => {
+    onStyleChange(property, value);
+  };
+  
+  // Geração do código CSS
+  const generateCssCode = () => {
+    let cssString = '';
+    
+    if (styles) {
+      Object.entries(styles).forEach(([prop, value]) => {
+        if (value) {
+          // Converter camelCase para kebab-case (CSS padrão)
+          const cssProp = prop.replace(/([A-Z])/g, '-$1').toLowerCase();
+          cssString += `${cssProp}: ${value};\n`;
+        }
+      });
+    }
+    
+    return cssString;
+  };
+  
+  const applyCssCode = () => {
+    // Aqui processamos o código CSS digitado manualmente
+    // Dividimos por linhas e então por propriedade/valor
+    const lines = cssCode.split(';').filter(line => line.trim() !== '');
+    
+    lines.forEach(line => {
+      const [prop, value] = line.split(':').map(part => part.trim());
+      if (prop && value) {
+        // Converter kebab-case para camelCase
+        const camelProp = prop.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
+        onStyleChange(camelProp, value);
+      }
+    });
+  };
+  
+  // Atualizar o código CSS quando os estilos mudarem
+  React.useEffect(() => {
+    setCssCode(generateCssCode());
+  }, [styles]);
+
+  // Renderização dos inputs de cor
   const renderColorInput = (label: string, property: string, value: string) => {
     return (
       <div className="mb-3">
@@ -405,7 +423,7 @@ const AdvancedCssEditor: React.FC<AdvancedCssEditorProps> = ({ styles, onStyleCh
             <div 
               className="w-6 h-6 rounded-md border border-border cursor-pointer"
               style={{ backgroundColor: value || 'transparent' }}
-              onClick={() => setColorPickerProperty(property)}
+              onClick={() => setColorPickerProperty(property === colorPickerProperty ? null : property)}
             />
             <Input
               value={value || ''}
@@ -415,7 +433,7 @@ const AdvancedCssEditor: React.FC<AdvancedCssEditorProps> = ({ styles, onStyleCh
           </div>
         </div>
         {colorPickerProperty === property && (
-          <div className="mt-2 rounded-md border border-border p-2 bg-muted/60">
+          <div className="mt-2 rounded-md border border-border p-2 bg-background shadow-md">
             <div className="space-y-2">
               {/* Cores básicas */}
               <div>
@@ -596,6 +614,7 @@ const AdvancedCssEditor: React.FC<AdvancedCssEditorProps> = ({ styles, onStyleCh
     );
   };
   
+  // Renderização dos inputs de dimensão (top, right, bottom, left)
   const renderDimensionInputs = (label: string, properties: { top: string, right: string, bottom: string, left: string }) => {
     return (
       <div className="mb-4">
@@ -658,6 +677,7 @@ const AdvancedCssEditor: React.FC<AdvancedCssEditorProps> = ({ styles, onStyleCh
     );
   };
   
+  // Renderização de selects para presets
   const renderPresetSelect = (label: string, property: string, presets: Array<{ label: string, value: string }>, currentValue: string) => {
     // Garantir que sempre temos um valor válido, nunca uma string vazia
     const safeValue = currentValue || "none";
@@ -674,12 +694,8 @@ const AdvancedCssEditor: React.FC<AdvancedCssEditorProps> = ({ styles, onStyleCh
               <SelectValue placeholder="Selecionar" />
             </SelectTrigger>
             <SelectContent>
-              <ScrollArea className="h-40">
-                {/* Garantir que sempre temos uma opção "none" */}
-                <SelectItem key="none" value="none" className="text-xs">
-                  Nenhum
-                </SelectItem>
-                {presets.map((preset) => (
+              <ScrollArea className="h-52">
+                {presets.map(preset => (
                   <SelectItem key={preset.value} value={preset.value} className="text-xs">
                     {preset.label}
                   </SelectItem>
@@ -691,64 +707,50 @@ const AdvancedCssEditor: React.FC<AdvancedCssEditorProps> = ({ styles, onStyleCh
       </div>
     );
   };
-  
-  const renderNumberWithUnitInput = (label: string, property: string, value: string, defaultUnit: string = 'px') => {
-    const parseValueAndUnit = (val: string) => {
-      if (!val) return { value: '', unit: defaultUnit };
-      
-      const numericMatch = val.match(/^(\d*\.?\d*)(.*)$/);
-      if (numericMatch) {
-        return {
-          value: numericMatch[1],
-          unit: numericMatch[2] || defaultUnit
-        };
-      }
-      
-      return { value: '', unit: defaultUnit };
-    };
-    
-    const { value: numericValue, unit } = parseValueAndUnit(value);
-    
-    return (
-      <div className="mb-3">
-        <div className="flex items-center justify-between mb-1.5">
-          <Label className="text-xs text-muted-foreground">{label}</Label>
-          <div className="flex items-center">
-            <Input
-              type="number"
-              value={numericValue}
-              onChange={(e) => updateUnitValue(property, e.target.value, unit)}
-              className="w-20 h-8 bg-muted border border-border text-xs mr-1"
-            />
-            <Select
-              value={unit}
-              onValueChange={(newUnit) => updateUnitValue(property, numericValue || '0', newUnit)}
-            >
-              <SelectTrigger className="w-16 h-8 bg-muted border border-border text-xs">
-                <SelectValue placeholder="Unidade" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="px" className="text-xs">px</SelectItem>
-                <SelectItem value="em" className="text-xs">em</SelectItem>
-                <SelectItem value="rem" className="text-xs">rem</SelectItem>
-                <SelectItem value="%" className="text-xs">%</SelectItem>
-                <SelectItem value="vh" className="text-xs">vh</SelectItem>
-                <SelectItem value="vw" className="text-xs">vw</SelectItem>
-                <SelectItem value="pt" className="text-xs">pt</SelectItem>
-                <SelectItem value="" className="text-xs">-</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </div>
-    );
-  };
-  
+
+  // Renderização dos controles para as propriedades de tipografia
   const renderTypographyControls = () => {
     return (
       <div className="space-y-1 py-2">
         {renderPresetSelect('Família da fonte', 'fontFamily', fontFamilyPresets, styles.fontFamily)}
-        {renderNumberWithUnitInput('Tamanho da fonte', 'fontSize', styles.fontSize)}
+        <div className="mb-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <Label className="text-xs text-muted-foreground">Tamanho da fonte</Label>
+            <div className="flex items-center space-x-1">
+              <Input
+                value={styles.fontSize?.replace(/[^0-9.]/g, '') || ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === '' || !isNaN(parseFloat(value))) {
+                    updateUnitValue('fontSize', value, 'px');
+                  }
+                }}
+                className="w-16 h-8 bg-muted border border-border text-xs"
+                placeholder="16"
+              />
+              <Select
+                value={styles.fontSize?.replace(/[0-9.]/g, '') || 'px'}
+                onValueChange={(unit) => {
+                  const value = styles.fontSize?.replace(/[^0-9.]/g, '') || '';
+                  if (value) {
+                    updateUnitValue('fontSize', value, unit);
+                  }
+                }}
+              >
+                <SelectTrigger className="w-16 h-8 bg-muted border border-border text-xs">
+                  <SelectValue placeholder="px" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="px" className="text-xs">px</SelectItem>
+                  <SelectItem value="em" className="text-xs">em</SelectItem>
+                  <SelectItem value="rem" className="text-xs">rem</SelectItem>
+                  <SelectItem value="%" className="text-xs">%</SelectItem>
+                  <SelectItem value="vw" className="text-xs">vw</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
         {renderPresetSelect('Peso da fonte', 'fontWeight', fontWeightPresets, styles.fontWeight)}
         {renderPresetSelect('Alinhamento', 'textAlign', textAlignPresets, styles.textAlign)}
         {renderPresetSelect('Transformação', 'textTransform', textTransformPresets, styles.textTransform)}
@@ -762,6 +764,7 @@ const AdvancedCssEditor: React.FC<AdvancedCssEditorProps> = ({ styles, onStyleCh
     );
   };
   
+  // Renderização dos controles para as propriedades de fundo
   const renderBackgroundControls = () => {
     return (
       <div className="space-y-1 py-2">
@@ -810,9 +813,9 @@ const AdvancedCssEditor: React.FC<AdvancedCssEditorProps> = ({ styles, onStyleCh
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="auto" className="text-xs">Auto</SelectItem>
-                <SelectItem value="cover" className="text-xs">Cobrir</SelectItem>
-                <SelectItem value="contain" className="text-xs">Conter</SelectItem>
-                <SelectItem value="100% 100%" className="text-xs">Estender</SelectItem>
+                <SelectItem value="cover" className="text-xs">Cover</SelectItem>
+                <SelectItem value="contain" className="text-xs">Contain</SelectItem>
+                <SelectItem value="100%" className="text-xs">100%</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -834,56 +837,43 @@ const AdvancedCssEditor: React.FC<AdvancedCssEditorProps> = ({ styles, onStyleCh
                 <SelectItem value="bottom" className="text-xs">Base</SelectItem>
                 <SelectItem value="left" className="text-xs">Esquerda</SelectItem>
                 <SelectItem value="right" className="text-xs">Direita</SelectItem>
-                <SelectItem value="top left" className="text-xs">Topo Esquerdo</SelectItem>
-                <SelectItem value="top right" className="text-xs">Topo Direito</SelectItem>
+                <SelectItem value="top left" className="text-xs">Topo Esquerda</SelectItem>
+                <SelectItem value="top right" className="text-xs">Topo Direita</SelectItem>
                 <SelectItem value="bottom left" className="text-xs">Base Esquerda</SelectItem>
                 <SelectItem value="bottom right" className="text-xs">Base Direita</SelectItem>
               </SelectContent>
             </Select>
           </div>
         </div>
-        
+
         <div className="mb-3">
           <div className="flex items-center justify-between mb-1.5">
             <Label className="text-xs text-muted-foreground">Gradiente</Label>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 text-xs"
-              onClick={() => {
-                const gradientValue = window.prompt(
-                  'Insira o valor do gradiente CSS:',
-                  styles.backgroundImage && styles.backgroundImage.includes('gradient') ? 
-                    styles.backgroundImage : 
-                    'linear-gradient(to bottom, #e66465, #9198e5)'
-                );
-                if (gradientValue) {
-                  onStyleChange('backgroundImage', gradientValue);
-                }
-              }}
-            >
-              Editar Gradiente
-            </Button>
+            <Input
+              value={styles.backgroundImage?.includes('linear-gradient') ? styles.backgroundImage : ''}
+              onChange={(e) => onStyleChange('backgroundImage', e.target.value)}
+              className="w-[208px] h-8 bg-muted border border-border text-xs"
+              placeholder="linear-gradient(to right, #eee, #333)"
+            />
           </div>
         </div>
       </div>
     );
   };
   
+  // Renderização dos controles para as propriedades de borda
   const renderBordersControls = () => {
     return (
       <div className="space-y-1 py-2">
         <div className="mb-3">
           <div className="flex items-center justify-between mb-1.5">
-            <Label className="text-xs text-muted-foreground">Espessura da borda</Label>
-            <div className="flex items-center space-x-1">
-              <Input
-                value={styles.borderWidth || ''}
-                onChange={(e) => onStyleChange('borderWidth', e.target.value)}
-                className="w-24 h-8 bg-muted border border-border text-xs"
-                placeholder="1px"
-              />
-            </div>
+            <Label className="text-xs text-muted-foreground">Largura da borda</Label>
+            <Input
+              value={styles.borderWidth || ''}
+              onChange={(e) => onStyleChange('borderWidth', e.target.value)}
+              className="w-24 h-8 bg-muted border border-border text-xs"
+              placeholder="1px"
+            />
           </div>
         </div>
         
@@ -1060,244 +1050,131 @@ const AdvancedCssEditor: React.FC<AdvancedCssEditorProps> = ({ styles, onStyleCh
             </div>
           </div>
         </div>
-        
-        <Separator className="my-2" />
-        
-        <div className="mb-3">
-          <div className="flex items-center justify-between mb-1.5">
-            <Label className="text-xs text-muted-foreground">Raios da borda individuais</Label>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 text-xs"
-              onClick={() => {
-                const expanded = document.getElementById('individual-border-radius');
-                if (expanded) {
-                  expanded.style.display = expanded.style.display === 'none' ? 'block' : 'none';
-                }
-              }}
-            >
-              Expandir
-            </Button>
-          </div>
-          
-          <div id="individual-border-radius" className="mt-2" style={{ display: 'none' }}>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label className="text-xs text-muted-foreground mb-1 block">Superior Esquerdo</Label>
-                <Input
-                  value={styles.borderTopLeftRadius || ''}
-                  onChange={(e) => onStyleChange('borderTopLeftRadius', e.target.value)}
-                  className="w-full h-8 bg-muted border border-border text-xs"
-                  placeholder="0px"
-                />
-              </div>
-              
-              <div>
-                <Label className="text-xs text-muted-foreground mb-1 block">Superior Direito</Label>
-                <Input
-                  value={styles.borderTopRightRadius || ''}
-                  onChange={(e) => onStyleChange('borderTopRightRadius', e.target.value)}
-                  className="w-full h-8 bg-muted border border-border text-xs"
-                  placeholder="0px"
-                />
-              </div>
-              
-              <div>
-                <Label className="text-xs text-muted-foreground mb-1 block">Inferior Esquerdo</Label>
-                <Input
-                  value={styles.borderBottomLeftRadius || ''}
-                  onChange={(e) => onStyleChange('borderBottomLeftRadius', e.target.value)}
-                  className="w-full h-8 bg-muted border border-border text-xs"
-                  placeholder="0px"
-                />
-              </div>
-              
-              <div>
-                <Label className="text-xs text-muted-foreground mb-1 block">Inferior Direito</Label>
-                <Input
-                  value={styles.borderBottomRightRadius || ''}
-                  onChange={(e) => onStyleChange('borderBottomRightRadius', e.target.value)}
-                  className="w-full h-8 bg-muted border border-border text-xs"
-                  placeholder="0px"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     );
   };
   
+  // Renderização dos controles para as propriedades de efeitos
   const renderEffectsControls = () => {
     return (
       <div className="space-y-1 py-2">
-        {renderPresetSelect('Sombra da caixa', 'boxShadow', boxShadowPresets, styles.boxShadow)}
-        {renderPresetSelect('Sombra do texto', 'textShadow', textShadowPresets, styles.textShadow)}
-        {renderPresetSelect('Opacidade', 'opacity', opacityPresets, styles.opacity)}
-        {renderPresetSelect('Filtro', 'filter', filterPresets, styles.filter)}
-        {renderPresetSelect('Backdrop filtro', 'backdropFilter', filterPresets, styles.backdropFilter)}
-        <Separator className="my-2" />
-        
+        {renderPresetSelect('Sombra', 'boxShadow', boxShadowPresets, styles.boxShadow)}
+        {renderPresetSelect('Opacidade', 'opacity', [
+          { label: '0% (Invisível)', value: '0' },
+          { label: '25%', value: '0.25' },
+          { label: '50%', value: '0.5' },
+          { label: '75%', value: '0.75' },
+          { label: '100% (Normal)', value: '1' },
+        ], styles.opacity)}
         {renderPresetSelect('Transformação', 'transform', transformPresets, styles.transform)}
-        
-        <div className="mb-3">
-          <div className="flex items-center justify-between mb-1.5">
-            <Label className="text-xs text-muted-foreground">Transformação 3D</Label>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 text-xs"
-              onClick={() => {
-                const expanded = document.getElementById('transform-3d');
-                if (expanded) {
-                  expanded.style.display = expanded.style.display === 'none' ? 'block' : 'none';
-                }
-              }}
-            >
-              Expandir
-            </Button>
-          </div>
-          
-          <div id="transform-3d" className="mt-2" style={{ display: 'none' }}>
-            <div className="space-y-2">
-              <div>
-                <Label className="text-xs text-muted-foreground mb-1 block">Origem da transformação</Label>
-                <Input
-                  value={styles.transformOrigin || ''}
-                  onChange={(e) => onStyleChange('transformOrigin', e.target.value)}
-                  className="w-full h-8 bg-muted border border-border text-xs"
-                  placeholder="center center"
-                />
-              </div>
-              
-              <div>
-                <Label className="text-xs text-muted-foreground mb-1 block">Translação 3D</Label>
-                <Input
-                  value={styles.translate3d || ''}
-                  onChange={(e) => onStyleChange('translate3d', e.target.value)}
-                  className="w-full h-8 bg-muted border border-border text-xs"
-                  placeholder="0, 0, 0"
-                />
-              </div>
-              
-              <div>
-                <Label className="text-xs text-muted-foreground mb-1 block">Rotação 3D</Label>
-                <Input
-                  value={styles.rotate3d || ''}
-                  onChange={(e) => onStyleChange('rotate3d', e.target.value)}
-                  className="w-full h-8 bg-muted border border-border text-xs"
-                  placeholder="0, 0, 0, 0deg"
-                />
-              </div>
-              
-              <div>
-                <Label className="text-xs text-muted-foreground mb-1 block">Perspectiva</Label>
-                <Input
-                  value={styles.perspective || ''}
-                  onChange={(e) => onStyleChange('perspective', e.target.value)}
-                  className="w-full h-8 bg-muted border border-border text-xs"
-                  placeholder="1000px"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <Separator className="my-2" />
-        
         {renderPresetSelect('Transição', 'transition', transitionPresets, styles.transition)}
-        
-        <div className="mb-3">
-          <div className="flex items-center justify-between mb-1.5">
-            <Label className="text-xs text-muted-foreground">Animação</Label>
-            <div className="flex items-center space-x-1">
-              <Input
-                value={styles.animation || ''}
-                onChange={(e) => onStyleChange('animation', e.target.value)}
-                className="w-[208px] h-8 bg-muted border border-border text-xs"
-                placeholder="nome duração easing delay repetições"
-              />
-            </div>
-          </div>
-        </div>
+        {renderPresetSelect('Filtro', 'filter', filterPresets, styles.filter)}
+        {renderPresetSelect('Backdrop Filter', 'backdropFilter', [
+          { label: 'Nenhum', value: 'none' },
+          { label: 'Desfoque 5px', value: 'blur(5px)' },
+          { label: 'Contraste 80%', value: 'contrast(0.8)' },
+          { label: 'Brilho 80%', value: 'brightness(0.8)' },
+          { label: 'Saturação 150%', value: 'saturate(1.5)' },
+          { label: 'Escala de cinza 50%', value: 'grayscale(0.5)' },
+        ], styles.backdropFilter)}
+        {renderPresetSelect('Mistura de cores', 'mixBlendMode', [
+          { label: 'Normal', value: 'normal' },
+          { label: 'Multiplicar', value: 'multiply' },
+          { label: 'Tela', value: 'screen' },
+          { label: 'Sobrepor', value: 'overlay' },
+          { label: 'Escurecer', value: 'darken' },
+          { label: 'Clarear', value: 'lighten' },
+          { label: 'Diferença', value: 'difference' },
+        ], styles.mixBlendMode)}
       </div>
     );
   };
   
+  // Renderização dos controles para as propriedades de layout
   const renderLayoutControls = () => {
     return (
       <div className="space-y-1 py-2">
         {renderPresetSelect('Display', 'display', displayPresets, styles.display)}
+        {renderPresetSelect('Posição', 'position', positionPresets, styles.position)}
         
-        {styles.display === 'flex' && (
+        {styles.position !== 'static' && (
           <>
             <div className="mb-3">
               <div className="flex items-center justify-between mb-1.5">
-                <Label className="text-xs text-muted-foreground">Direção</Label>
-                <Select
-                  value={styles.flexDirection || 'row'}
-                  onValueChange={(value) => onStyleChange('flexDirection', value)}
-                >
-                  <SelectTrigger className="w-32 h-8 bg-muted border border-border text-xs">
-                    <SelectValue placeholder="Direção" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="row" className="text-xs">Linha</SelectItem>
-                    <SelectItem value="column" className="text-xs">Coluna</SelectItem>
-                    <SelectItem value="row-reverse" className="text-xs">Linha reversa</SelectItem>
-                    <SelectItem value="column-reverse" className="text-xs">Coluna reversa</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label className="text-xs text-muted-foreground">Top</Label>
+                <Input
+                  value={styles.top || ''}
+                  onChange={(e) => onStyleChange('top', e.target.value)}
+                  className="w-32 h-8 bg-muted border border-border text-xs"
+                  placeholder="auto"
+                />
               </div>
             </div>
             
             <div className="mb-3">
               <div className="flex items-center justify-between mb-1.5">
-                <Label className="text-xs text-muted-foreground">Justificação</Label>
-                <Select
-                  value={styles.justifyContent || 'flex-start'}
-                  onValueChange={(value) => onStyleChange('justifyContent', value)}
-                >
-                  <SelectTrigger className="w-32 h-8 bg-muted border border-border text-xs">
-                    <SelectValue placeholder="Justificação" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="flex-start" className="text-xs">Início</SelectItem>
-                    <SelectItem value="center" className="text-xs">Centro</SelectItem>
-                    <SelectItem value="flex-end" className="text-xs">Fim</SelectItem>
-                    <SelectItem value="space-between" className="text-xs">Entre</SelectItem>
-                    <SelectItem value="space-around" className="text-xs">Ao redor</SelectItem>
-                    <SelectItem value="space-evenly" className="text-xs">Igualmente</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label className="text-xs text-muted-foreground">Right</Label>
+                <Input
+                  value={styles.right || ''}
+                  onChange={(e) => onStyleChange('right', e.target.value)}
+                  className="w-32 h-8 bg-muted border border-border text-xs"
+                  placeholder="auto"
+                />
               </div>
             </div>
             
             <div className="mb-3">
               <div className="flex items-center justify-between mb-1.5">
-                <Label className="text-xs text-muted-foreground">Alinhamento</Label>
-                <Select
-                  value={styles.alignItems || 'stretch'}
-                  onValueChange={(value) => onStyleChange('alignItems', value)}
-                >
-                  <SelectTrigger className="w-32 h-8 bg-muted border border-border text-xs">
-                    <SelectValue placeholder="Alinhamento" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="flex-start" className="text-xs">Início</SelectItem>
-                    <SelectItem value="center" className="text-xs">Centro</SelectItem>
-                    <SelectItem value="flex-end" className="text-xs">Fim</SelectItem>
-                    <SelectItem value="stretch" className="text-xs">Esticar</SelectItem>
-                    <SelectItem value="baseline" className="text-xs">Linha base</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label className="text-xs text-muted-foreground">Bottom</Label>
+                <Input
+                  value={styles.bottom || ''}
+                  onChange={(e) => onStyleChange('bottom', e.target.value)}
+                  className="w-32 h-8 bg-muted border border-border text-xs"
+                  placeholder="auto"
+                />
               </div>
             </div>
             
             <div className="mb-3">
               <div className="flex items-center justify-between mb-1.5">
-                <Label className="text-xs text-muted-foreground">Espaçamento</Label>
+                <Label className="text-xs text-muted-foreground">Left</Label>
+                <Input
+                  value={styles.left || ''}
+                  onChange={(e) => onStyleChange('left', e.target.value)}
+                  className="w-32 h-8 bg-muted border border-border text-xs"
+                  placeholder="auto"
+                />
+              </div>
+            </div>
+            
+            <div className="mb-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <Label className="text-xs text-muted-foreground">z-index</Label>
+                <Input
+                  value={styles.zIndex || ''}
+                  onChange={(e) => onStyleChange('zIndex', e.target.value)}
+                  className="w-32 h-8 bg-muted border border-border text-xs"
+                  placeholder="auto"
+                />
+              </div>
+            </div>
+          </>
+        )}
+        
+        {styles.display === 'flex' && (
+          <>
+            <Separator className="my-2" />
+            <h3 className="text-sm font-medium mb-2">Flexbox</h3>
+            
+            {renderPresetSelect('Flex Direction', 'flexDirection', flexDirectionPresets, styles.flexDirection)}
+            {renderPresetSelect('Flex Wrap', 'flexWrap', flexWrapPresets, styles.flexWrap)}
+            {renderPresetSelect('Justify Content', 'justifyContent', justifyContentPresets, styles.justifyContent)}
+            {renderPresetSelect('Align Items', 'alignItems', alignItemsPresets, styles.alignItems)}
+            {renderPresetSelect('Align Content', 'alignContent', alignContentPresets, styles.alignContent)}
+            
+            <div className="mb-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <Label className="text-xs text-muted-foreground">Gap</Label>
                 <Input
                   value={styles.gap || ''}
                   onChange={(e) => onStyleChange('gap', e.target.value)}
@@ -1306,30 +1183,14 @@ const AdvancedCssEditor: React.FC<AdvancedCssEditorProps> = ({ styles, onStyleCh
                 />
               </div>
             </div>
-            
-            <div className="mb-3">
-              <div className="flex items-center justify-between mb-1.5">
-                <Label className="text-xs text-muted-foreground">Envolvimento</Label>
-                <Select
-                  value={styles.flexWrap || 'nowrap'}
-                  onValueChange={(value) => onStyleChange('flexWrap', value)}
-                >
-                  <SelectTrigger className="w-32 h-8 bg-muted border border-border text-xs">
-                    <SelectValue placeholder="Envolvimento" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="nowrap" className="text-xs">Sem quebra</SelectItem>
-                    <SelectItem value="wrap" className="text-xs">Quebrar</SelectItem>
-                    <SelectItem value="wrap-reverse" className="text-xs">Quebrar reverso</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
           </>
         )}
         
         {styles.display === 'grid' && (
           <>
+            <Separator className="my-2" />
+            <h3 className="text-sm font-medium mb-2">Grid</h3>
+            
             <div className="mb-3">
               <div className="flex items-center justify-between mb-1.5">
                 <Label className="text-xs text-muted-foreground">Colunas da grade</Label>
@@ -1411,7 +1272,7 @@ const AdvancedCssEditor: React.FC<AdvancedCssEditorProps> = ({ styles, onStyleCh
           
           <div className="mb-3">
             <div className="flex items-center justify-between mb-1.5">
-              <Label className="text-xs text-muted-foreground">Min Largura</Label>
+              <Label className="text-xs text-muted-foreground">Min-Largura</Label>
               <Input
                 value={styles.minWidth || ''}
                 onChange={(e) => onStyleChange('minWidth', e.target.value)}
@@ -1423,7 +1284,7 @@ const AdvancedCssEditor: React.FC<AdvancedCssEditorProps> = ({ styles, onStyleCh
           
           <div className="mb-3">
             <div className="flex items-center justify-between mb-1.5">
-              <Label className="text-xs text-muted-foreground">Min Altura</Label>
+              <Label className="text-xs text-muted-foreground">Min-Altura</Label>
               <Input
                 value={styles.minHeight || ''}
                 onChange={(e) => onStyleChange('minHeight', e.target.value)}
@@ -1435,7 +1296,7 @@ const AdvancedCssEditor: React.FC<AdvancedCssEditorProps> = ({ styles, onStyleCh
           
           <div className="mb-3">
             <div className="flex items-center justify-between mb-1.5">
-              <Label className="text-xs text-muted-foreground">Max Largura</Label>
+              <Label className="text-xs text-muted-foreground">Max-Largura</Label>
               <Input
                 value={styles.maxWidth || ''}
                 onChange={(e) => onStyleChange('maxWidth', e.target.value)}
@@ -1447,7 +1308,7 @@ const AdvancedCssEditor: React.FC<AdvancedCssEditorProps> = ({ styles, onStyleCh
           
           <div className="mb-3">
             <div className="flex items-center justify-between mb-1.5">
-              <Label className="text-xs text-muted-foreground">Max Altura</Label>
+              <Label className="text-xs text-muted-foreground">Max-Altura</Label>
               <Input
                 value={styles.maxHeight || ''}
                 onChange={(e) => onStyleChange('maxHeight', e.target.value)}
@@ -1457,149 +1318,67 @@ const AdvancedCssEditor: React.FC<AdvancedCssEditorProps> = ({ styles, onStyleCh
             </div>
           </div>
         </div>
-        
-        <Separator className="my-2" />
-        
-        {renderPresetSelect('Posição', 'position', positionPresets, styles.position)}
-        
-        {styles.position && styles.position !== 'static' && (
-          <div className="grid grid-cols-2 gap-3">
-            <div className="mb-3">
-              <div className="flex items-center justify-between mb-1.5">
-                <Label className="text-xs text-muted-foreground">Topo</Label>
-                <Input
-                  value={styles.top || ''}
-                  onChange={(e) => onStyleChange('top', e.target.value)}
-                  className="w-24 h-8 bg-muted border border-border text-xs"
-                  placeholder="auto"
-                />
-              </div>
-            </div>
-            
-            <div className="mb-3">
-              <div className="flex items-center justify-between mb-1.5">
-                <Label className="text-xs text-muted-foreground">Direita</Label>
-                <Input
-                  value={styles.right || ''}
-                  onChange={(e) => onStyleChange('right', e.target.value)}
-                  className="w-24 h-8 bg-muted border border-border text-xs"
-                  placeholder="auto"
-                />
-              </div>
-            </div>
-            
-            <div className="mb-3">
-              <div className="flex items-center justify-between mb-1.5">
-                <Label className="text-xs text-muted-foreground">Base</Label>
-                <Input
-                  value={styles.bottom || ''}
-                  onChange={(e) => onStyleChange('bottom', e.target.value)}
-                  className="w-24 h-8 bg-muted border border-border text-xs"
-                  placeholder="auto"
-                />
-              </div>
-            </div>
-            
-            <div className="mb-3">
-              <div className="flex items-center justify-between mb-1.5">
-                <Label className="text-xs text-muted-foreground">Esquerda</Label>
-                <Input
-                  value={styles.left || ''}
-                  onChange={(e) => onStyleChange('left', e.target.value)}
-                  className="w-24 h-8 bg-muted border border-border text-xs"
-                  placeholder="auto"
-                />
-              </div>
-            </div>
-            
-            {renderNumberWithUnitInput('Z-index', 'zIndex', styles.zIndex)}
-          </div>
-        )}
-        
-        {styles.position !== 'absolute' && styles.position !== 'fixed' && (
-          <>
-            {renderPresetSelect('Float', 'float', floatPresets, styles.float)}
-            {renderPresetSelect('Clear', 'clear', floatPresets, styles.clear)}
-          </>
-        )}
       </div>
     );
   };
   
+  // Renderização dos controles para as propriedades de visibilidade
   const renderVisibilityControls = () => {
     return (
       <div className="space-y-1 py-2">
         {renderPresetSelect('Visibilidade', 'visibility', visibilityPresets, styles.visibility)}
+        {renderPresetSelect('Overflow', 'overflow', overflowPresets, styles.overflow)}
         {renderPresetSelect('Overflow X', 'overflowX', overflowPresets, styles.overflowX)}
         {renderPresetSelect('Overflow Y', 'overflowY', overflowPresets, styles.overflowY)}
-        {renderPresetSelect('Display', 'display', displayPresets, styles.display)}
         {renderPresetSelect('Cursor', 'cursor', cursorPresets, styles.cursor)}
-        {renderPresetSelect('Opacidade', 'opacity', opacityPresets, styles.opacity)}
+        {renderPresetSelect('Ponteiro-eventos', 'pointerEvents', [
+          { label: 'Auto', value: 'auto' },
+          { label: 'Nenhum', value: 'none' },
+        ], styles.pointerEvents)}
+        {renderPresetSelect('Seleção de usuário', 'userSelect', [
+          { label: 'Auto', value: 'auto' },
+          { label: 'Nenhum', value: 'none' },
+          { label: 'Texto', value: 'text' },
+          { label: 'Tudo', value: 'all' },
+        ], styles.userSelect)}
         
-        <div className="mb-3">
-          <div className="flex items-center justify-between mb-1.5">
-            <Label className="text-xs text-muted-foreground">Pointer Events</Label>
-            <Select
-              value={styles.pointerEvents || 'auto'}
-              onValueChange={(value) => onStyleChange('pointerEvents', value)}
-            >
-              <SelectTrigger className="w-32 h-8 bg-muted border border-border text-xs">
-                <SelectValue placeholder="Selecionar" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="auto" className="text-xs">Auto</SelectItem>
-                <SelectItem value="none" className="text-xs">Nenhum</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        
-        <div className="mb-3">
-          <div className="flex items-center justify-between mb-1.5">
-            <Label className="text-xs text-muted-foreground">User Select</Label>
-            <Select
-              value={styles.userSelect || 'auto'}
-              onValueChange={(value) => onStyleChange('userSelect', value)}
-            >
-              <SelectTrigger className="w-32 h-8 bg-muted border border-border text-xs">
-                <SelectValue placeholder="Selecionar" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="auto" className="text-xs">Auto</SelectItem>
-                <SelectItem value="none" className="text-xs">Nenhum</SelectItem>
-                <SelectItem value="text" className="text-xs">Texto</SelectItem>
-                <SelectItem value="all" className="text-xs">Tudo</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="flex items-center justify-between mb-1.5">
+          <Label className="text-xs text-muted-foreground">Ordem</Label>
+          <Input
+            type="number"
+            value={styles.order || ''}
+            onChange={(e) => onStyleChange('order', e.target.value)}
+            className="w-20 h-8 bg-muted border border-border text-xs"
+            placeholder="0"
+            min="-99"
+            max="99"
+          />
         </div>
       </div>
     );
   };
   
+  // Renderização dos controles para CSS bruto
   const renderRawCssControls = () => {
     return (
-      <div className="space-y-4 py-2">
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <Label className="text-sm font-medium">CSS Personalizado</Label>
-            <Button 
-              size="sm" 
-              variant="outline"
-              className="h-8 text-xs"
-              onClick={applyCssCode}
-            >
-              Aplicar
-            </Button>
-          </div>
-          
+      <div>
+        <div className="mb-3">
+          <Label className="text-xs mb-1 block">CSS Bruto</Label>
           <Textarea
             value={cssCode}
             onChange={(e) => setCssCode(e.target.value)}
-            className="font-mono text-xs bg-muted border border-border h-[300px]"
+            rows={15}
+            className="w-full p-3 text-xs font-mono bg-muted border border-border resize-y"
             placeholder="Digite seu CSS personalizado aqui..."
           />
         </div>
+        <Button 
+          onClick={applyCssCode} 
+          size="sm" 
+          className="w-full"
+        >
+          Aplicar CSS
+        </Button>
       </div>
     );
   };
