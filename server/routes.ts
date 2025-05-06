@@ -1539,9 +1539,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       `;
       
       const result = await db.execute(query);
-      const tables = result.rows.map((row: any) => row.table_name);
       
-      res.json({ tables });
+      // Obter informações detalhadas de cada tabela
+      const tablesWithDetails = await Promise.all(result.rows.map(async (row: any) => {
+        const tableName = row.table_name;
+        
+        // Contar registros na tabela
+        let rowCount = 0;
+        try {
+          const countQuery = sql`SELECT COUNT(*) as count FROM ${sql.identifier(tableName)}`;
+          const countResult = await db.execute(countQuery);
+          rowCount = parseInt(countResult.rows[0].count, 10);
+        } catch (err) {
+          console.error(`Erro ao contar registros da tabela ${tableName}:`, err);
+        }
+        
+        return {
+          name: tableName,
+          rowCount,
+          description: "", // No futuro, podemos adicionar metadados para descrições
+          hasApi: true,    // Assumimos que todas as tabelas têm API
+          createdAt: new Date().toISOString()
+        };
+      }));
+      
+      res.json({ tables: tablesWithDetails });
     } catch (error) {
       handleError(res, error, "Erro ao buscar tabelas do banco de dados");
     }
