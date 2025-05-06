@@ -190,7 +190,7 @@ async function handleCreateDatabaseTable(req: Request, res: Response) {
         for (const method of apiMethods) {
           const apiMetadata = {
             projectId: parseInt(projectId),
-            databaseId: savedTable.id,
+            tableId: savedTable.id,
             apiPath: `/api/projects/${projectId}/${name.toLowerCase()}`,
             method: method,
             description: `API ${method} para tabela ${name}`,
@@ -230,51 +230,58 @@ async function handleCreateDatabaseTable(req: Request, res: Response) {
 // Rota para listar tabelas do banco de dados
 async function handleGetDatabaseTables(req: Request, res: Response) {
   try {
-    // Consulta para obter todas as tabelas do schema public exceto as do drizzle
-    const tablesQuery = `
-      SELECT 
-        tablename as name,
-        obj_description(('public.' || tablename)::regclass, 'pg_class') as description,
-        (SELECT COUNT(*) FROM ${name}) as "rowCount",
-        NOW() as "createdAt"
-      FROM 
-        pg_tables 
-      WHERE 
-        schemaname = 'public' 
-        AND tablename NOT LIKE 'drizzle%'
-        AND tablename != 'pgmigrations'
-      ORDER BY 
-        tablename
-    `;
+    const projectId = req.query.projectId ? parseInt(req.query.projectId as string) : null;
     
-    try {
-      const result = await pool.query(tablesQuery.replace(/\${name}/g, 'information_schema.tables'));
-      
-      // Para cada tabela, consultar novamente para obter o número real de linhas
-      const tablesWithCounts = await Promise.all(result.rows.map(async (table) => {
-        try {
-          const countResult = await pool.query(`SELECT COUNT(*) as count FROM ${table.name}`);
-          return {
-            ...table,
-            rowCount: parseInt(countResult.rows[0].count, 10)
-          };
-        } catch (err) {
-          // Se houver erro ao contar, manter o valor zero
-          return {
-            ...table,
-            rowCount: 0
-          };
-        }
-      }));
-      
-      return res.json({
-        tables: tablesWithCounts
-      });
-    } catch (error) {
-      // Se ocorrer um erro ao listar as tabelas, retornar lista vazia
-      console.error("Erro ao listar tabelas:", error);
-      return res.json({ tables: [] });
+    if (!projectId) {
+      return res.status(400).json({ message: "O ID do projeto é obrigatório" });
     }
+    
+    // Verificar se o projeto existe
+    const project = await storage.getProjectById(projectId);
+    if (!project) {
+      return res.status(404).json({ message: "Projeto não encontrado" });
+    }
+    
+    // Buscar tabelas vinculadas a este projeto diretamente da tabela de metadados
+    const projectTables = await db.query.projectDatabases.findMany({
+      where: eq(schema.projectDatabases.projectId, projectId)
+    });
+    
+    // Para cada tabela, obter o número de registros
+    const tablesWithCounts = await Promise.all(projectTables.map(async (table) => {
+      try {
+        const countQuery = sql`SELECT COUNT(*) as count FROM ${sql.identifier(table.tableName)}`;
+        const countResult = await db.execute(countQuery);
+        const rowCount = parseInt(countResult.rows[0]?.count || '0', 10);
+        
+        return {
+          id: table.id,
+          name: table.displayName,
+          tableName: table.tableName, 
+          description: table.description || '',
+          rowCount,
+          apiEnabled: table.apiEnabled,
+          createdAt: table.createdAt,
+          updatedAt: table.updatedAt
+        };
+      } catch (err) {
+        // Se houver erro ao contar, manter o valor zero
+        return {
+          id: table.id,
+          name: table.displayName,
+          tableName: table.tableName,
+          description: table.description || '',
+          rowCount: 0,
+          apiEnabled: table.apiEnabled,
+          createdAt: table.createdAt,
+          updatedAt: table.updatedAt
+        };
+      }
+    }));
+    
+    return res.json({
+      tables: tablesWithCounts
+    });
   } catch (error) {
     console.error('Erro ao listar tabelas:', error);
     return res.status(500).json({
@@ -4297,6 +4304,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Endpoint para criar uma nova tabela no banco de dados
   app.post(`${apiPrefix}/database/tables`, handleCreateDatabaseTable);
+  
+  // Rota específica para pegar tabelas por projeto
+  app.get(`${apiPrefix}/projects/:projectId/database/tables`, (req, res) => {
+    // Passar o ID do projeto via query para reutilizar o handler existente
+    req.query.projectId = req.params.projectId;
+    handleGetDatabaseTables(req, res);
+  });
   
   // ============= APIS DINÂMICAS E GERENCIAMENTO =============
   
