@@ -841,7 +841,9 @@ export class ProjectTableManager {
             }
             // Formatar o IN para SQL com os valores do array
             const inValues = value.map(v => sql`${v}`);
-            condition = sql`${sql.identifier(field)} IN (${sql.join(inValues, sql`, `)})`;
+            condition = isNumericField
+              ? sql`CAST(${sql.identifier(field)} AS NUMERIC) IN (${sql.join(inValues, sql`, `)})`
+              : sql`${sql.identifier(field)} IN (${sql.join(inValues, sql`, `)})`;
             break;
           case 'between':
             if (!Array.isArray(value) || value.length !== 2) {
