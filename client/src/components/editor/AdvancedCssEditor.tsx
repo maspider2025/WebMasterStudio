@@ -295,6 +295,107 @@ const AdvancedCssEditor: React.FC<AdvancedCssEditorProps> = ({ styles, onStyleCh
     setCssCode(generateCssCode());
   }, [styles]);
   
+  // Paleta de cores expandida com mais opções e organizada por categorias
+  const colorPalette = {
+    basic: [
+      { color: '#ffffff', name: 'Branco' },
+      { color: '#000000', name: 'Preto' },
+      { color: 'transparent', name: 'Transparente' },
+    ],
+    gray: [
+      { color: '#f8f9fa', name: 'Cinza 50' },
+      { color: '#e9ecef', name: 'Cinza 100' },
+      { color: '#dee2e6', name: 'Cinza 200' },
+      { color: '#ced4da', name: 'Cinza 300' },
+      { color: '#adb5bd', name: 'Cinza 400' },
+      { color: '#6c757d', name: 'Cinza 500' },
+      { color: '#495057', name: 'Cinza 600' },
+      { color: '#343a40', name: 'Cinza 700' },
+      { color: '#212529', name: 'Cinza 800' },
+      { color: '#111111', name: 'Cinza 900' },
+    ],
+    red: [
+      { color: '#ffebee', name: 'Vermelho 50' },
+      { color: '#ffcdd2', name: 'Vermelho 100' },
+      { color: '#ef5350', name: 'Vermelho 400' },
+      { color: '#f44336', name: 'Vermelho 500' },
+      { color: '#e53935', name: 'Vermelho 600' },
+      { color: '#d32f2f', name: 'Vermelho 700' },
+      { color: '#c62828', name: 'Vermelho 800' },
+      { color: '#b71c1c', name: 'Vermelho 900' },
+    ],
+    blue: [
+      { color: '#e3f2fd', name: 'Azul 50' },
+      { color: '#bbdefb', name: 'Azul 100' },
+      { color: '#42a5f5', name: 'Azul 400' },
+      { color: '#2196f3', name: 'Azul 500' },
+      { color: '#1e88e5', name: 'Azul 600' },
+      { color: '#1976d2', name: 'Azul 700' },
+      { color: '#1565c0', name: 'Azul 800' },
+      { color: '#0d47a1', name: 'Azul 900' },
+    ],
+    green: [
+      { color: '#e8f5e9', name: 'Verde 50' },
+      { color: '#c8e6c9', name: 'Verde 100' },
+      { color: '#66bb6a', name: 'Verde 400' },
+      { color: '#4caf50', name: 'Verde 500' },
+      { color: '#43a047', name: 'Verde 600' },
+      { color: '#388e3c', name: 'Verde 700' },
+      { color: '#2e7d32', name: 'Verde 800' },
+      { color: '#1b5e20', name: 'Verde 900' },
+    ],
+    amber: [
+      { color: '#fff8e1', name: 'Âmbar 50' },
+      { color: '#ffecb3', name: 'Âmbar 100' },
+      { color: '#ffca28', name: 'Âmbar 400' },
+      { color: '#ffc107', name: 'Âmbar 500' },
+      { color: '#ffb300', name: 'Âmbar 600' },
+      { color: '#ffa000', name: 'Âmbar 700' },
+      { color: '#ff8f00', name: 'Âmbar 800' },
+      { color: '#ff6f00', name: 'Âmbar 900' },
+    ],
+    purple: [
+      { color: '#f3e5f5', name: 'Roxo 50' },
+      { color: '#e1bee7', name: 'Roxo 100' },
+      { color: '#ab47bc', name: 'Roxo 400' },
+      { color: '#9c27b0', name: 'Roxo 500' },
+      { color: '#8e24aa', name: 'Roxo 600' },
+      { color: '#7b1fa2', name: 'Roxo 700' },
+      { color: '#6a1b9a', name: 'Roxo 800' },
+      { color: '#4a148c', name: 'Roxo 900' },
+    ],
+    teal: [
+      { color: '#e0f2f1', name: 'Turquesa 50' },
+      { color: '#b2dfdb', name: 'Turquesa 100' },
+      { color: '#26a69a', name: 'Turquesa 400' },
+      { color: '#009688', name: 'Turquesa 500' },
+      { color: '#00897b', name: 'Turquesa 600' },
+      { color: '#00796b', name: 'Turquesa 700' },
+      { color: '#00695c', name: 'Turquesa 800' },
+      { color: '#004d40', name: 'Turquesa 900' },
+    ],
+    orange: [
+      { color: '#fff3e0', name: 'Laranja 50' },
+      { color: '#ffe0b2', name: 'Laranja 100' },
+      { color: '#ffa726', name: 'Laranja 400' },
+      { color: '#ff9800', name: 'Laranja 500' },
+      { color: '#fb8c00', name: 'Laranja 600' },
+      { color: '#f57c00', name: 'Laranja 700' },
+      { color: '#ef6c00', name: 'Laranja 800' },
+      { color: '#e65100', name: 'Laranja 900' },
+    ],
+    pink: [
+      { color: '#fce4ec', name: 'Rosa 50' },
+      { color: '#f8bbd0', name: 'Rosa 100' },
+      { color: '#ec407a', name: 'Rosa 400' },
+      { color: '#e91e63', name: 'Rosa 500' },
+      { color: '#d81b60', name: 'Rosa 600' },
+      { color: '#c2185b', name: 'Rosa 700' },
+      { color: '#ad1457', name: 'Rosa 800' },
+      { color: '#880e4f', name: 'Rosa 900' },
+    ],
+  };
+
   const renderColorInput = (label: string, property: string, value: string) => {
     return (
       <div className="mb-3">
@@ -314,39 +415,180 @@ const AdvancedCssEditor: React.FC<AdvancedCssEditorProps> = ({ styles, onStyleCh
           </div>
         </div>
         {colorPickerProperty === property && (
-          <div className="mt-2">
-            <div className="flex flex-wrap gap-1 mb-2">
-              {['#1a1a1a', '#f44336', '#e91e63', '#9c27b0', '#673ab7', 
-                '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4', '#009688', 
-                '#4caf50', '#8bc34a', '#cddc39', '#ffeb3b', '#ffc107', 
-                '#ff9800', '#ff5722', '#795548', '#9e9e9e', '#607d8b', 
-                '#ffffff', 'transparent'].map(color => (
-                <div 
-                  key={color}
-                  className="w-6 h-6 rounded-md border border-border cursor-pointer"
-                  style={{ backgroundColor: color }}
-                  onClick={() => {
-                    updateColorValue(property, color);
-                    setColorPickerProperty(null);
-                  }}
+          <div className="mt-2 rounded-md border border-border p-2 bg-muted/60">
+            <div className="space-y-2">
+              {/* Cores básicas */}
+              <div>
+                <Label className="text-xs mb-1 block">Básicas</Label>
+                <div className="flex flex-wrap gap-1 mb-2">
+                  {colorPalette.basic.map(({color, name}) => (
+                    <div 
+                      key={color}
+                      className="w-6 h-6 rounded-md border border-border cursor-pointer relative group"
+                      style={{ backgroundColor: color }}
+                      onClick={() => {
+                        updateColorValue(property, color);
+                        setColorPickerProperty(null);
+                      }}
+                      title={name}
+                    >
+                      {color === 'transparent' && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="h-px w-full bg-muted-foreground rotate-45" />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              {/* Cinzas */}
+              <div>
+                <Label className="text-xs mb-1 block">Cinzas</Label>
+                <div className="flex flex-wrap gap-1 mb-2">
+                  {colorPalette.gray.map(({color, name}) => (
+                    <div 
+                      key={color}
+                      className="w-6 h-6 rounded-md border border-border cursor-pointer"
+                      style={{ backgroundColor: color }}
+                      onClick={() => {
+                        updateColorValue(property, color);
+                        setColorPickerProperty(null);
+                      }}
+                      title={name}
+                    />
+                  ))}
+                </div>
+              </div>
+              
+              {/* Cores principais */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs mb-1 block">Vermelhos</Label>
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {colorPalette.red.map(({color, name}) => (
+                      <div 
+                        key={color}
+                        className="w-6 h-6 rounded-md border border-border cursor-pointer"
+                        style={{ backgroundColor: color }}
+                        onClick={() => {
+                          updateColorValue(property, color);
+                          setColorPickerProperty(null);
+                        }}
+                        title={name}
+                      />
+                    ))}
+                  </div>
+                </div>
+                
+                <div>
+                  <Label className="text-xs mb-1 block">Azuis</Label>
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {colorPalette.blue.map(({color, name}) => (
+                      <div 
+                        key={color}
+                        className="w-6 h-6 rounded-md border border-border cursor-pointer"
+                        style={{ backgroundColor: color }}
+                        onClick={() => {
+                          updateColorValue(property, color);
+                          setColorPickerProperty(null);
+                        }}
+                        title={name}
+                      />
+                    ))}
+                  </div>
+                </div>
+                
+                <div>
+                  <Label className="text-xs mb-1 block">Verdes</Label>
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {colorPalette.green.map(({color, name}) => (
+                      <div 
+                        key={color}
+                        className="w-6 h-6 rounded-md border border-border cursor-pointer"
+                        style={{ backgroundColor: color }}
+                        onClick={() => {
+                          updateColorValue(property, color);
+                          setColorPickerProperty(null);
+                        }}
+                        title={name}
+                      />
+                    ))}
+                  </div>
+                </div>
+                
+                <div>
+                  <Label className="text-xs mb-1 block">Âmbar</Label>
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {colorPalette.amber.map(({color, name}) => (
+                      <div 
+                        key={color}
+                        className="w-6 h-6 rounded-md border border-border cursor-pointer"
+                        style={{ backgroundColor: color }}
+                        onClick={() => {
+                          updateColorValue(property, color);
+                          setColorPickerProperty(null);
+                        }}
+                        title={name}
+                      />
+                    ))}
+                  </div>
+                </div>
+                
+                <div>
+                  <Label className="text-xs mb-1 block">Laranjas</Label>
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {colorPalette.orange.map(({color, name}) => (
+                      <div 
+                        key={color}
+                        className="w-6 h-6 rounded-md border border-border cursor-pointer"
+                        style={{ backgroundColor: color }}
+                        onClick={() => {
+                          updateColorValue(property, color);
+                          setColorPickerProperty(null);
+                        }}
+                        title={name}
+                      />
+                    ))}
+                  </div>
+                </div>
+                
+                <div>
+                  <Label className="text-xs mb-1 block">Roxos</Label>
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {colorPalette.purple.map(({color, name}) => (
+                      <div 
+                        key={color}
+                        className="w-6 h-6 rounded-md border border-border cursor-pointer"
+                        style={{ backgroundColor: color }}
+                        onClick={() => {
+                          updateColorValue(property, color);
+                          setColorPickerProperty(null);
+                        }}
+                        title={name}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex space-x-1 mt-3 items-center">
+                <Label className="text-xs">Personalizado:</Label>
+                <Input
+                  type="color"
+                  value={value?.startsWith('#') ? value : '#000000'}
+                  onChange={(e) => updateColorValue(property, e.target.value)}
+                  className="w-8 h-8 p-0 border border-border"
                 />
-              ))}
-            </div>
-            <div className="flex space-x-1">
-              <Input
-                type="color"
-                value={value?.startsWith('#') ? value : '#000000'}
-                onChange={(e) => updateColorValue(property, e.target.value)}
-                className="w-8 h-8 p-0 border border-border"
-              />
-              <Button 
-                size="sm" 
-                variant="outline" 
-                className="text-xs h-8"
-                onClick={() => setColorPickerProperty(null)}
-              >
-                Fechar
-              </Button>
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="text-xs h-8 ml-auto"
+                  onClick={() => setColorPickerProperty(null)}
+                >
+                  Fechar
+                </Button>
+              </div>
             </div>
           </div>
         )}
@@ -417,12 +659,15 @@ const AdvancedCssEditor: React.FC<AdvancedCssEditorProps> = ({ styles, onStyleCh
   };
   
   const renderPresetSelect = (label: string, property: string, presets: Array<{ label: string, value: string }>, currentValue: string) => {
+    // Garantir que sempre temos um valor válido, nunca uma string vazia
+    const safeValue = currentValue || "none";
+    
     return (
       <div className="mb-3">
         <div className="flex items-center justify-between mb-1.5">
           <Label className="text-xs text-muted-foreground">{label}</Label>
           <Select
-            value={currentValue || ''}
+            value={safeValue}
             onValueChange={(value) => updateFromPreset(property, value)}
           >
             <SelectTrigger className="w-32 h-8 bg-muted border border-border text-xs">
@@ -430,6 +675,10 @@ const AdvancedCssEditor: React.FC<AdvancedCssEditorProps> = ({ styles, onStyleCh
             </SelectTrigger>
             <SelectContent>
               <ScrollArea className="h-40">
+                {/* Garantir que sempre temos uma opção "none" */}
+                <SelectItem key="none" value="none" className="text-xs">
+                  Nenhum
+                </SelectItem>
                 {presets.map((preset) => (
                   <SelectItem key={preset.value} value={preset.value} className="text-xs">
                     {preset.label}
