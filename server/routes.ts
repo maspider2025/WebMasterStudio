@@ -4985,7 +4985,9 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
   // Handler para criar uma nova tabela (dinâmica)
   async function handleCreateTable(req: Request, res: Response) {
     try {
-      const { tableName, columns } = req.body;
+      console.log('handleCreateTable chamado com req.body:', JSON.stringify(req.body));
+      console.log('handleCreateTable chamado com req.query:', req.query); 
+      const { tableName, columns } = req.body || {};
       const projectId = req.query.projectId ? parseInt(req.query.projectId as string, 10) : null;
       
       // Log dos dados recebidos para debug
@@ -4997,7 +4999,8 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
       }
       
       if (!tableName || !columns || !Array.isArray(columns) || columns.length === 0) {
-        return res.status(400).json({ error: "Nome da tabela e definição de colunas são obrigatórios" });
+        console.log('Erro de validação: tableName =', tableName, 'columns =', columns);
+        return res.status(400).json({ message: "Nome da tabela e colunas são obrigatórios" });
       }
       
       // Construir o nome completo da tabela com o prefixo do projeto
@@ -5124,33 +5127,139 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
     });
   });
 
-  // Endpoint personalizado para projetos - criar tabela
-  app.post(`${apiPrefix}/projects/:projectId/database/tables`, (req, res) => {
-    // Verificar se o corpo da requisição foi recebido
-    console.log('Endpoint de criação de tabela para projeto específico');
-    console.log('Corpo da requisição BRUTO:', req.body);
-    console.log('Corpo da requisição JSON:', JSON.stringify(req.body));
-    console.log('Headers:', req.headers);
-    console.log('Content-Type:', req.headers['content-type']);
-    console.log('Query params:', req.query);
-    console.log('URL params:', req.params);
-    
-    // Se o corpo estiver vazio mas deveria ser JSON (pelo content-type), pode ser um erro de parsing
-    if (req.headers['content-type']?.includes('application/json') && 
-        (Object.keys(req.body || {}).length === 0)) {
-      console.log('AVISO: Corpo da requisição vazio ou não parseado corretamente!');
+  // Nova implementação direta para criar tabela vinculada a um projeto
+  app.post(`${apiPrefix}/projects/:projectId/database/tables`, async (req, res) => {
+    try {
+      console.log('Endpoint de criação de tabela para projeto específico');
+      console.log('Corpo da requisição BRUTO:', req.body);
+      console.log('Corpo da requisição JSON:', JSON.stringify(req.body));
+      
+      // Extrair dados da requisição
+      const projectId = parseInt(req.params.projectId, 10);
+      const { tableName, columns } = req.body;
+      
+      console.log(`Criando tabela '${tableName}' para projeto ${projectId}`);
+      console.log('Colunas:', columns);
+      
+      // Validações básicas
+      if (!projectId) {
+        return res.status(400).json({ message: "ID do projeto inválido" });
+      }
+      
+      if (!tableName || !columns || !Array.isArray(columns) || columns.length === 0) {
+        console.log('Falha na validação:');
+        console.log('- tableName:', tableName);
+        console.log('- columns existe:', !!columns);
+        console.log('- columns é array:', Array.isArray(columns));
+        console.log('- columns length:', columns ? columns.length : 'N/A');
+        return res.status(400).json({ message: "Nome da tabela e definição de colunas são obrigatórios" });
+      }
+      
+      // Construir o nome completo da tabela com o prefixo do projeto
+      const fullTableName = `p${projectId}_${tableName}`;
+      console.log(`Nome completo da tabela: ${fullTableName}`);
+      
+      // Verificar se a tabela já existe
+      const tableCheck = await db.execute(sql`
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.tables 
+          WHERE table_schema = 'public' AND table_name = ${fullTableName}
+        ) as exists
+      `);
+      
+      if (tableCheck.rows[0].exists) {
+        return res.status(400).json({ message: `Tabela ${tableName} já existe para o projeto ${projectId}` });
+      }
+      
+      // Registrar metadados da tabela para o projeto
+      try {
+        await db.execute(sql`
+          INSERT INTO project_databases (project_id, table_name, display_name, description, created_at, updated_at)
+          VALUES (${projectId}, ${fullTableName}, ${tableName}, ${'Tabela criada via API'}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `);
+        console.log('Metadados da tabela registrados com sucesso');
+      } catch (metadataError) {
+        console.error('Erro ao registrar metadados da tabela:', metadataError);
+        // Continuamos mesmo se falhar o registro de metadados
+      }
+      
+      // Construir a cláusula de criação de tabela
+      let columnsDefinition = columns.map(col => {
+        let def = `"${col.name}" ${mapTypeToSQL(col.type)}`;
+        
+        if (col.primary) {
+          def += " PRIMARY KEY";
+        }
+        
+        if (col.notNull) {
+          def += " NOT NULL";
+        }
+        
+        if (col.defaultValue !== undefined) {
+          def += ` DEFAULT ${formatSQLValue(col.defaultValue, col.type)}`;
+        }
+        
+        return def;
+      }).join(', ');
+      
+      // Adicionar colunas de timestamp e soft delete se solicitado
+      const includeTimestamps = req.body.timestamps !== false;
+      const includeSoftDelete = req.body.softDelete === true;
+      
+      if (includeTimestamps) {
+        columnsDefinition += `, "created_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "updated_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`;
+      }
+      
+      if (includeSoftDelete) {
+        columnsDefinition += `, "deleted_at" TIMESTAMP`;
+      }
+      
+      console.log(`SQL: CREATE TABLE "${fullTableName}" (${columnsDefinition})`);
+      
+      // Criar a tabela
+      const createTableQuery = sql.raw(`CREATE TABLE "${fullTableName}" (${columnsDefinition})`);
+      await db.execute(createTableQuery);
+      
+      console.log('Tabela criada com sucesso:', fullTableName);
+      
+      // Tentar registrar API automática para a tabela (CRUD básico)
+      try {
+        // Gerar API paths para CRUD
+        const crudEndpoints = [
+          { method: 'GET', path: `/api/data/${tableName}`, description: `Listar todos os registros de ${tableName}` },
+          { method: 'GET', path: `/api/data/${tableName}/:id`, description: `Obter registro específico de ${tableName}` },
+          { method: 'POST', path: `/api/data/${tableName}`, description: `Criar novo registro em ${tableName}` },
+          { method: 'PUT', path: `/api/data/${tableName}/:id`, description: `Atualizar registro em ${tableName}` },
+          { method: 'DELETE', path: `/api/data/${tableName}/:id`, description: `Excluir registro em ${tableName}` }
+        ];
+        
+        for (const endpoint of crudEndpoints) {
+          await db.execute(sql`
+            INSERT INTO project_apis (project_id, api_path, method, description, auto_generated, table_name, created_at, updated_at)
+            VALUES (${projectId}, ${endpoint.path}, ${endpoint.method}, ${endpoint.description}, TRUE, ${fullTableName}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          `);
+        }
+        
+        console.log('APIs CRUD automáticas registradas para a tabela');
+      } catch (apiError) {
+        console.error('Erro ao registrar APIs automáticas:', apiError);
+        // Continuamos mesmo se falhar o registro de APIs
+      }
+      
+      // Responder com sucesso
+      res.status(201).json({
+        success: true,
+        message: `Tabela ${tableName} criada com sucesso para o projeto ${projectId}`,
+        tableName,
+        fullTableName,
+        projectId,
+        columns: columns.map(col => col.name)
+      });
+      
+    } catch (error) {
+      console.error('Erro ao criar tabela para projeto:', error);
+      res.status(500).json({ message: 'Erro ao criar tabela para o projeto' });
     }
-    
-    // Verificar tableName e columns
-    const { tableName, columns } = req.body || {};
-    console.log('tableName extraído:', tableName);
-    console.log('columns extraído:', columns);
-    
-    // Transferir o ID do projeto dos parâmetros para a query
-    req.query.projectId = req.params.projectId;
-    
-    // Chamar o handler de criação de tabela
-    handleCreateTable(req, res);
   });
 
   const httpServer = createServer(app);
