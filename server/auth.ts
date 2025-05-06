@@ -74,17 +74,27 @@ async function hashPassword(password: string): Promise<string> {
  * Protegido contra timing attacks
  */
 async function comparePasswords(suppliedPassword: string, storedPassword: string): Promise<boolean> {
-  // Extrair o hash e o salt da senha armazenada
-  const [hashedPassword, salt] = storedPassword.split(".");
-  
-  // Converter o hash armazenado para Buffer
-  const hashedPasswordBuf = Buffer.from(hashedPassword, "hex");
-  
-  // Hash da senha fornecida com o mesmo salt
-  const suppliedPasswordBuf = (await scryptAsync(suppliedPassword, salt, 64)) as Buffer;
-  
-  // Comparação protegida contra timing attacks
-  return timingSafeEqual(hashedPasswordBuf, suppliedPasswordBuf);
+  try {
+    // Extrair o hash e o salt da senha armazenada
+    const [hashedPassword, salt] = storedPassword.split(".");
+    
+    if (!hashedPassword || !salt) {
+      console.error("Formato de senha inválido:", storedPassword);
+      return false;
+    }
+    
+    // Converter o hash armazenado para Buffer
+    const hashedPasswordBuf = Buffer.from(hashedPassword, "hex");
+    
+    // Hash da senha fornecida com o mesmo salt
+    const suppliedPasswordBuf = (await scryptAsync(suppliedPassword, salt, 64)) as Buffer;
+    
+    // Comparação protegida contra timing attacks
+    return timingSafeEqual(hashedPasswordBuf, suppliedPasswordBuf);
+  } catch (error) {
+    console.error("Erro ao comparar senhas:", error);
+    return false;
+  }
 }
 
 /**
