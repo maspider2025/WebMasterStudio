@@ -17,6 +17,15 @@ const stripeInstance = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.ST
 export async function registerRoutes(app: Express): Promise<Server> {
   // API routes prefix
   const apiPrefix = '/api';
+  
+  // Helper para tratamento de erros
+  const handleError = (res: any, error: any, message = 'Erro interno do servidor') => {
+    console.error(`API Error: ${message}`, error);
+    return res.status(500).json({
+      error: message,
+      message: error.message || 'Um erro inesperado ocorreu.'
+    });
+  };
 
   // User routes
   app.post(`${apiPrefix}/auth/register`, async (req, res) => {
@@ -718,6 +727,118 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error fetching products:', error);
       res.status(500).json({ message: 'Failed to fetch products' });
+    }
+  });
+
+  // Rota para buscar produtos por slug
+  app.get(`${apiPrefix}/projects/:projectId/products/by-slug/:slug`, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const slug = req.params.slug;
+      
+      if (!slug) {
+        return res.status(400).json({ message: 'Slug de produto é obrigatório' });
+      }
+      
+      // Buscar o produto por slug
+      const product = await db.query.products.findFirst({
+        where: and(
+          eq(schema.products.projectId, projectId),
+          eq(schema.products.slug, slug),
+          eq(schema.products.status, 'published')
+        )
+      });
+      
+      if (!product) {
+        return res.status(404).json({ message: 'Produto não encontrado' });
+      }
+      
+      // Buscar as variantes do produto
+      const variants = await db.query.productVariants.findMany({
+        where: eq(schema.productVariants.productId, product.id)
+      });
+      
+      // Buscar as categorias relacionadas ao produto
+      const categoryRelations = await db.query.productCategoryRelations.findMany({
+        where: eq(schema.productCategoryRelations.productId, product.id),
+        with: {
+          category: true
+        }
+      });
+      
+      const categories = categoryRelations.map(relation => relation.category);
+      
+      // Retornar produto com informações relacionadas
+      res.status(200).json({
+        ...product,
+        variants,
+        categories
+      });
+    } catch (error) {
+      return handleError(res, error, 'Erro ao buscar produto por slug');
+    }
+  });
+  
+  // Rota para obter avaliações de um produto
+  app.get(`${apiPrefix}/projects/:projectId/products/:productId/reviews`, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const productId = parseInt(req.params.productId);
+      
+      // Verificar se o produto existe
+      const product = await db.query.products.findFirst({
+        where: and(
+          eq(schema.products.id, productId),
+          eq(schema.products.projectId, projectId)
+        )
+      });
+      
+      if (!product) {
+        return res.status(404).json({ message: 'Produto não encontrado' });
+      }
+      
+      // Buscar avaliações
+      // Nota: Esta é uma implementação simples. Em um sistema real, as avaliações seriam armazenadas em uma tabela separada.
+      // Para simular, vamos retornar avaliações aleatórias
+      const mockReviews = [
+        {
+          id: 1,
+          productId: productId,
+          userId: 1,
+          userName: "João Silva",
+          rating: 5,
+          title: "Excelente produto!",
+          comment: "Comprei para minha filha e ela adorou. Produto de qualidade e entrega rápida.",
+          createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+          helpfulCount: 12
+        },
+        {
+          id: 2,
+          productId: productId,
+          userId: 2,
+          userName: "Maria Oliveira",
+          rating: 4,
+          title: "Bom custo-benefício",
+          comment: "O produto atendeu às expectativas. Entrega foi mais rápida do que o esperado.",
+          createdAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
+          helpfulCount: 7
+        },
+        {
+          id: 3,
+          productId: productId,
+          userId: 3,
+          userName: "Pedro Santos",
+          rating: 3,
+          title: "Bom, mas pode melhorar",
+          comment: "O produto é bom, mas esperava mais durabilidade. O atendimento ao cliente foi excelente quando precisei de ajuda.",
+          createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+          helpfulCount: 3
+        }
+      ];
+      
+      res.status(200).json(mockReviews);
+    } catch (error) {
+      return handleError(res, error, 'Erro ao buscar avaliações do produto');
     }
   });
 
