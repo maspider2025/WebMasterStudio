@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { useDrag, useDrop } from 'react-dnd';
 import { ElementTypes } from '@/lib/element-types';
 import { useEditorStore } from '@/lib/editor-store';
 import { Element } from '@/lib/element-types';
+import { toast } from '@/hooks/use-toast';
 
 /**
  * FormComponents.tsx
@@ -366,12 +368,175 @@ export const FormSubmitButton = ({ element, isEditMode }: FormFieldProps) => {
 };
 
 /**
+ * Componente para campo de formulário arrastável no modo de edição
+ * Este componente envolve um elemento de formulário para torná-lo arrastável
+ * e reposicionável dentro do formulário.
+ */
+interface DraggableFormFieldProps {
+  element: Element;
+  isEditMode: boolean;
+  onDelete?: () => void; 
+  onEdit?: () => void;
+  onDuplicate?: () => void;
+  parentId: string;
+}
+
+export const DraggableFormField = ({ 
+  element, 
+  isEditMode, 
+  onDelete, 
+  onEdit, 
+  onDuplicate,
+  parentId 
+}: DraggableFormFieldProps) => {
+  const [{ isDragging }, drag, preview] = useDrag(() => ({
+    type: 'FORM_FIELD',
+    item: { id: element.id, parentId, type: 'FORM_FIELD' },
+    collect: (monitor) => ({
+      isDragging: !!monitor.isDragging(),
+    }),
+  }), [element.id, parentId]);
+
+  // Hooks para edição do elemento
+  const { updateElement } = useEditorStore();
+  const [showControls, setShowControls] = useState(false);
+
+  const handleUpdateElement = (updates: Partial<Element>) => {
+    updateElement(element.id, updates);
+  };
+
+  // Renderizar o elemento apropriado baseado no tipo
+  const renderChild = () => {
+    switch (element.type) {
+      case ElementTypes.input:
+        return <FormTextField element={element} isEditMode={isEditMode} onChange={handleUpdateElement} />;
+      case ElementTypes.select:
+        return <FormSelectField element={element} isEditMode={isEditMode} onChange={handleUpdateElement} />;
+      case ElementTypes.checkbox:
+        return <FormCheckboxField element={element} isEditMode={isEditMode} onChange={handleUpdateElement} />;
+      case ElementTypes.textarea:
+        return <FormTextareaField element={element} isEditMode={isEditMode} onChange={handleUpdateElement} />;
+      case ElementTypes.button:
+        return <FormSubmitButton element={element} isEditMode={isEditMode} onChange={handleUpdateElement} />;
+      default:
+        return null;
+    }
+  };
+
+  if (!isEditMode) {
+    return renderChild();
+  }
+
+  return (
+    <div 
+      ref={preview}
+      className={`relative mb-4 border border-transparent hover:border-primary/40 rounded-md p-2 ${
+        isDragging ? 'opacity-50' : ''
+      }`}
+      onMouseEnter={() => setShowControls(true)}
+      onMouseLeave={() => setShowControls(false)}
+    >
+      {showControls && (
+        <div className="absolute top-0 right-0 flex gap-1 p-1 bg-background/80 backdrop-blur-sm border border-border rounded-bl rounded-tr-md z-10">
+          <div 
+            ref={drag}
+            className="cursor-move hover:bg-primary/10 p-1 rounded"
+            title="Arrastar"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 3v4a1 1 0 0 0 1 1h4"/>
+              <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/>
+              <path d="M12 11v6"/>
+              <path d="M9 14h6"/>
+            </svg>
+          </div>
+          {onEdit && (
+            <button 
+              onClick={onEdit}
+              className="hover:bg-primary/10 p-1 rounded"
+              title="Editar propriedades"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 20h9"/>
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+              </svg>
+            </button>
+          )}
+          {onDuplicate && (
+            <button 
+              onClick={onDuplicate}
+              className="hover:bg-primary/10 p-1 rounded"
+              title="Duplicar campo"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+            </button>
+          )}
+          {onDelete && (
+            <button 
+              onClick={onDelete}
+              className="hover:bg-red-500/10 text-red-500 p-1 rounded"
+              title="Remover campo"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 6h18"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                <line x1="10" y1="11" x2="10" y2="17"/>
+                <line x1="14" y1="11" x2="14" y2="17"/>
+              </svg>
+            </button>
+          )}
+        </div>
+      )}
+      <div className={isDragging ? 'opacity-50' : ''}>
+        {renderChild()}
+      </div>
+    </div>
+  );
+};
+
+/**
+ * Componente para o local onde um campo de formulário pode ser solto
+ */
+interface FormFieldDropAreaProps {
+  parentId: string;
+  index: number;
+  onDrop: (itemId: string, targetIndex: number) => void;
+}
+
+export const FormFieldDropArea = ({ parentId, index, onDrop }: FormFieldDropAreaProps) => {
+  const [{ isOver }, drop] = useDrop(() => ({
+    accept: 'FORM_FIELD',
+    drop: (item: { id: string, parentId: string }) => {
+      onDrop(item.id, index);
+      return { allowedDropEffect: 'move' };
+    },
+    collect: (monitor) => ({
+      isOver: !!monitor.isOver(),
+    }),
+  }), [index, onDrop]);
+
+  return (
+    <div 
+      ref={drop} 
+      className={`h-2 my-1 transition-all ${
+        isOver ? 'bg-primary/30 h-8' : ''}${!isOver ? 'hover:bg-primary/10' : ''}`} 
+    />
+  );
+};
+
+/**
  * Componente de formulário completo que contém campos e gerencia submissão
  * Este componente serve como um container para os campos de formulário,
  * permitindo total customização de cada elemento interno.
  */
 export const FormComponent = ({ element, isEditMode, onChange }: FormFieldProps) => {
-  const { elements, addElement, updateElement } = useEditorStore();
+  const { elements, addElement, updateElement, removeElement, getUniqueId } = useEditorStore();
+  
+  // Estado para controlar a ordem dos campos
+  const [fieldOrder, setFieldOrder] = useState<string[]>([]);
   
   // Encontra todos os elementos filhos do formulário
   const getChildElements = () => {
@@ -382,6 +547,113 @@ export const FormComponent = ({ element, isEditMode, onChange }: FormFieldProps)
   };
   
   const childElements = getChildElements();
+  
+  // Atualiza a ordem dos campos quando necessário
+  useEffect(() => {
+    if (element.children && fieldOrder.length === 0) {
+      setFieldOrder(element.children);
+    }
+  }, [element.children, fieldOrder]);
+  
+  // Handler para quando um campo é movido para uma nova posição via drag-and-drop
+  const handleFieldMove = (fieldId: string, targetIndex: number) => {
+    if (!element.children) return;
+    
+    // Remove o campo da posição atual
+    const currentOrder = [...element.children];
+    const currentIndex = currentOrder.indexOf(fieldId);
+    
+    if (currentIndex === -1) return;  // Campo não encontrado
+    
+    // Cria nova ordem com o campo na posição de destino
+    currentOrder.splice(currentIndex, 1);
+    currentOrder.splice(targetIndex, 0, fieldId);
+    
+    // Atualiza a ordem dos campos
+    setFieldOrder(currentOrder);
+    
+    // Atualiza o elemento do formulário com a nova ordem de campos
+    updateElement(element.id, {
+      children: currentOrder
+    });
+  };
+  
+  // Handler para remover um campo do formulário
+  const handleFieldDelete = (fieldId: string) => {
+    if (!element.children) return;
+    
+    // Confirmar a remoção
+    if (!confirm('Tem certeza que deseja remover este campo?')) return;
+    
+    // Remove o campo da lista de filhos do formulário
+    const updatedChildren = element.children.filter(id => id !== fieldId);
+    
+    // Atualiza o elemento do formulário
+    updateElement(element.id, {
+      children: updatedChildren
+    });
+    
+    // Atualiza a ordem dos campos
+    setFieldOrder(updatedChildren);
+    
+    // Remove o elemento do editor
+    removeElement(fieldId);
+  };
+  
+  // Handler para duplicar um campo
+  const handleFieldDuplicate = (field: Element) => {
+    if (!element.children) return;
+    
+    // Cria uma cópia do campo com um novo ID
+    const newFieldId = getUniqueId();
+    const newField: Element = {
+      ...field,
+      id: newFieldId,
+      parent: element.id,
+      htmlAttributes: {
+        ...field.htmlAttributes,
+        name: `${field.htmlAttributes?.name || ''}_copy` 
+      }
+    };
+    
+    // Adiciona o novo campo ao editor
+    addElement(newField);
+    
+    // Adiciona o novo campo à lista de filhos do formulário
+    const updatedChildren = [...element.children, newFieldId];
+    
+    // Atualiza o elemento do formulário
+    updateElement(element.id, {
+      children: updatedChildren
+    });
+    
+    // Atualiza a ordem dos campos
+    setFieldOrder(updatedChildren);
+  };
+  
+  // Handler para editar as propriedades de um campo
+  const handleFieldEdit = (fieldId: string) => {
+    // Seleciona o campo para edição (isso irá abrir o painel de propriedades)
+    const targetElement = elements.find(el => el.id === fieldId);
+    if (targetElement) {
+      // Aqui poderíamos implementar a lógica para abrir um modal de edição ou selecionar o campo
+      alert(`Edição do campo ${targetElement.name || targetElement.id} será implementada em um modal de propriedades específico.`);
+    }
+  };
+  
+  // Função que organiza o render dos campos na ordem correta
+  const renderOrderedFields = () => {
+    if (!element.children || element.children.length === 0) return [];
+    
+    // Usa a ordem personalizada se disponível, ou a ordem padrão dos children
+    const orderedIds = fieldOrder.length > 0 ? fieldOrder : element.children;
+    
+    return orderedIds
+      .map(childId => elements.find(el => el.id === childId))
+      .filter(Boolean) as Element[];
+  };
+  
+  const orderedElements = renderOrderedFields();
   
   // Processa o envio do formulário
   const handleSubmit = (e: React.FormEvent) => {
