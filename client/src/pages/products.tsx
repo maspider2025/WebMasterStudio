@@ -162,7 +162,7 @@ export default function Products() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {products?.map((product: Product) => {
+          {products.map((product) => {
             const productImages = product.images ? JSON.parse(product.images) : [];
             const productImageUrl = productImages.length > 0 ? productImages[0] : 'https://placehold.co/400x400/png';
             const hasVariants = product.variants && product.variants.length > 0;
