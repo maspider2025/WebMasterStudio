@@ -1,561 +1,443 @@
-import { Element, ElementTypes } from './element-types';
-import { DatabaseField, DatabaseTable, DatabaseSchema, getOrCreateSchema, updateSchemaFromElements } from './database-config';
 import { apiRequest } from './queryClient';
-import { toast } from '@/hooks/use-toast';
+import { useToast } from '@/hooks/use-toast';
 
 /**
- * Módulo de Integração de Elementos com Banco de Dados
+ * Conjunto de funções para integração entre elementos do editor visual e banco de dados
  * 
- * Este módulo provê funcionalidades para conectar elementos visuais
- * do editor com o banco de dados e operações de API automaticamente geradas.
- * 
- * - Integra o editor com o gerenciador de banco de dados
- * - Provê métodos para recuperar e salvar dados
- * - Gerencia atualizações automáticas entre elementos e entidades do banco
+ * Essas funções permitem a comunicação entre elementos visuais (como formulários, listas, tabelas)
+ * e fontes de dados no banco de dados, facilitando a criação de aplicações CRUD sem código.
  */
 
-// Status de operações assíncronas de banco de dados
-export interface DatabaseOperationStatus {
-  loading: boolean;
-  error: string | null;
-  lastUpdated?: Date;
+// Cache para armazenar dados de tabelas para evitar chamadas repetidas
+interface SchemaCache {
+  [projectId: string]: {
+    tables: any[];
+    fields: { [tableName: string]: any[] };
+    timestamp: number;
+  };
 }
 
-// Armazena o estado das operações por elemento
-const operationStatusMap = new Map<string, DatabaseOperationStatus>();
+const schemaCache: SchemaCache = {};
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos em milissegundos
 
-// Inicializa o status para um elemento
-export function initializeElementDatabaseStatus(elementId: string): void {
-  if (!operationStatusMap.has(elementId)) {
-    operationStatusMap.set(elementId, {
-      loading: false,
-      error: null
-    });
+/**
+ * Busca todas as tabelas disponíveis para um projeto
+ */
+export async function fetchDatabaseTables(projectId: string): Promise<any[]> {
+  try {
+    const response = await apiRequest('GET', `/api/database/tables`);
+    
+    if (!response.ok) {
+      throw new Error(`Falha ao buscar tabelas: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    return data.tables || [];
+  } catch (error) {
+    console.error('Erro ao buscar tabelas do banco de dados:', error);
+    return [];
   }
 }
 
-// Obtém o status atual de operações de banco de dados para um elemento
-export function getElementDatabaseStatus(elementId: string): DatabaseOperationStatus {
-  if (!operationStatusMap.has(elementId)) {
-    initializeElementDatabaseStatus(elementId);
+/**
+ * Busca os campos (colunas) de uma tabela específica
+ */
+export async function fetchTableFields(projectId: string, tableName: string): Promise<any[]> {
+  try {
+    const response = await apiRequest('GET', `/api/database/tables/${tableName}/schema`);
+    
+    if (!response.ok) {
+      throw new Error(`Falha ao buscar schema da tabela: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    return data.columns || [];
+  } catch (error) {
+    console.error(`Erro ao buscar campos da tabela ${tableName}:`, error);
+    return [];
+  }
+}
+
+/**
+ * Função sincrona para obter tabelas do cache ou buscar novas (mock para desenvolvimento)
+ */
+export function getAvailableTables(projectId: string): any[] {
+  // Se tiver no cache e estiver válido, retorna do cache
+  if (
+    schemaCache[projectId] && 
+    schemaCache[projectId].tables && 
+    (Date.now() - schemaCache[projectId].timestamp) < CACHE_DURATION
+  ) {
+    return schemaCache[projectId].tables;
   }
   
-  return operationStatusMap.get(elementId)!;
-}
-
-// Funções para atualizar o status das operações
-function setLoadingStatus(elementId: string, loading: boolean): void {
-  const status = getElementDatabaseStatus(elementId);
-  operationStatusMap.set(elementId, { ...status, loading });
-}
-
-function setErrorStatus(elementId: string, error: string | null): void {
-  const status = getElementDatabaseStatus(elementId);
-  operationStatusMap.set(elementId, { ...status, error, lastUpdated: new Date() });
-}
-
-// Cache de dados por elemento e fonte de dados
-const dataCache = new Map<string, any>();
-
-// Gera uma chave para o cache de dados
-function generateCacheKey(elementId: string, dataSource: string, filters?: any): string {
-  const filtersStr = filters ? JSON.stringify(filters) : '';
-  return `${elementId}:${dataSource}${filtersStr}`;
+  // Em um cenário real, isso enviaria uma requisição assíncrona
+  // Por enquanto, vamos usar dados mock para desenvolvimento
+  const mockTables = [
+    { name: 'Produtos', slug: 'products', fieldCount: 12, hasAPI: true },
+    { name: 'Categorias', slug: 'categories', fieldCount: 5, hasAPI: true },
+    { name: 'Clientes', slug: 'customers', fieldCount: 8, hasAPI: true },
+    { name: 'Pedidos', slug: 'orders', fieldCount: 10, hasAPI: true },
+    { name: 'Carrinho', slug: 'cart', fieldCount: 5, hasAPI: true },
+    { name: 'Usuários', slug: 'users', fieldCount: 7, hasAPI: true },
+    { name: 'Comentários', slug: 'comments', fieldCount: 6, hasAPI: true },
+    { name: 'Contatos', slug: 'contacts', fieldCount: 9, hasAPI: false },
+  ];
+  
+  // Atualizar o cache
+  if (!schemaCache[projectId]) {
+    schemaCache[projectId] = { tables: [], fields: {}, timestamp: 0 };
+  }
+  
+  schemaCache[projectId].tables = mockTables;
+  schemaCache[projectId].timestamp = Date.now();
+  
+  return mockTables;
 }
 
 /**
- * Busca dados para um elemento baseado em sua configuração de conexão
+ * Função sincrona para obter campos de uma tabela (mock para desenvolvimento)
  */
-export async function fetchDataForElement(element: Element): Promise<any> {
-  if (!element.dataConnection?.configured || !element.dataConnection.dataSource) {
+export function getTableFields(projectId: string, tableName: string): any[] {
+  // Se tiver no cache e estiver válido, retorna do cache
+  if (
+    schemaCache[projectId] && 
+    schemaCache[projectId].fields && 
+    schemaCache[projectId].fields[tableName] && 
+    (Date.now() - schemaCache[projectId].timestamp) < CACHE_DURATION
+  ) {
+    return schemaCache[projectId].fields[tableName];
+  }
+  
+  // Em um cenário real, isso enviaria uma requisição assíncrona
+  // Por enquanto, vamos usar dados mock para desenvolvimento
+  const mockFields: {[key: string]: any[]} = {
+    'products': [
+      { name: 'id', type: 'integer', required: true, isPrimary: true, label: 'ID' },
+      { name: 'name', type: 'string', required: true, isPrimary: false, label: 'Nome do Produto' },
+      { name: 'slug', type: 'string', required: true, isPrimary: false, label: 'Slug' },
+      { name: 'description', type: 'text', required: false, isPrimary: false, label: 'Descrição' },
+      { name: 'price', type: 'number', required: true, isPrimary: false, label: 'Preço' },
+      { name: 'sale_price', type: 'number', required: false, isPrimary: false, label: 'Preço Promocional' },
+      { name: 'sku', type: 'string', required: false, isPrimary: false, label: 'SKU' },
+      { name: 'stock', type: 'integer', required: true, isPrimary: false, label: 'Estoque', defaultValue: 0 },
+      { name: 'category_id', type: 'integer', required: false, isPrimary: false, label: 'Categoria' },
+      { name: 'featured', type: 'boolean', required: false, isPrimary: false, label: 'Destaque', defaultValue: false },
+      { name: 'created_at', type: 'datetime', required: true, isPrimary: false, label: 'Data de Criação' },
+      { name: 'updated_at', type: 'datetime', required: true, isPrimary: false, label: 'Data de Atualização' },
+    ],
+    'categories': [
+      { name: 'id', type: 'integer', required: true, isPrimary: true, label: 'ID' },
+      { name: 'name', type: 'string', required: true, isPrimary: false, label: 'Nome da Categoria' },
+      { name: 'slug', type: 'string', required: true, isPrimary: false, label: 'Slug' },
+      { name: 'description', type: 'text', required: false, isPrimary: false, label: 'Descrição' },
+      { name: 'created_at', type: 'datetime', required: true, isPrimary: false, label: 'Data de Criação' },
+    ],
+    'customers': [
+      { name: 'id', type: 'integer', required: true, isPrimary: true, label: 'ID' },
+      { name: 'name', type: 'string', required: true, isPrimary: false, label: 'Nome Completo' },
+      { name: 'email', type: 'string', required: true, isPrimary: false, label: 'Email' },
+      { name: 'phone', type: 'string', required: false, isPrimary: false, label: 'Telefone' },
+      { name: 'address', type: 'text', required: false, isPrimary: false, label: 'Endereço' },
+      { name: 'city', type: 'string', required: false, isPrimary: false, label: 'Cidade' },
+      { name: 'state', type: 'string', required: false, isPrimary: false, label: 'Estado' },
+      { name: 'created_at', type: 'datetime', required: true, isPrimary: false, label: 'Data de Criação' },
+    ],
+    'orders': [
+      { name: 'id', type: 'integer', required: true, isPrimary: true, label: 'ID' },
+      { name: 'customer_id', type: 'integer', required: true, isPrimary: false, label: 'Cliente' },
+      { name: 'status', type: 'string', required: true, isPrimary: false, label: 'Status' },
+      { name: 'total', type: 'number', required: true, isPrimary: false, label: 'Total' },
+      { name: 'shipping', type: 'number', required: false, isPrimary: false, label: 'Frete' },
+      { name: 'tax', type: 'number', required: false, isPrimary: false, label: 'Impostos' },
+      { name: 'payment_method', type: 'string', required: false, isPrimary: false, label: 'Método de Pagamento' },
+      { name: 'notes', type: 'text', required: false, isPrimary: false, label: 'Observações' },
+      { name: 'created_at', type: 'datetime', required: true, isPrimary: false, label: 'Data de Criação' },
+      { name: 'updated_at', type: 'datetime', required: true, isPrimary: false, label: 'Data de Atualização' },
+    ],
+    'users': [
+      { name: 'id', type: 'integer', required: true, isPrimary: true, label: 'ID' },
+      { name: 'name', type: 'string', required: true, isPrimary: false, label: 'Nome' },
+      { name: 'email', type: 'string', required: true, isPrimary: false, label: 'Email' },
+      { name: 'password', type: 'string', required: true, isPrimary: false, label: 'Senha' },
+      { name: 'role', type: 'string', required: true, isPrimary: false, label: 'Função' },
+      { name: 'active', type: 'boolean', required: true, isPrimary: false, label: 'Ativo', defaultValue: true },
+      { name: 'created_at', type: 'datetime', required: true, isPrimary: false, label: 'Data de Criação' },
+    ],
+    'contacts': [
+      { name: 'id', type: 'integer', required: true, isPrimary: true, label: 'ID' },
+      { name: 'name', type: 'string', required: true, isPrimary: false, label: 'Nome' },
+      { name: 'email', type: 'string', required: true, isPrimary: false, label: 'Email' },
+      { name: 'phone', type: 'string', required: false, isPrimary: false, label: 'Telefone' },
+      { name: 'subject', type: 'string', required: true, isPrimary: false, label: 'Assunto' },
+      { name: 'message', type: 'text', required: true, isPrimary: false, label: 'Mensagem' },
+      { name: 'status', type: 'string', required: true, isPrimary: false, label: 'Status', defaultValue: 'new' },
+      { name: 'created_at', type: 'datetime', required: true, isPrimary: false, label: 'Data de Envio' },
+      { name: 'responded_at', type: 'datetime', required: false, isPrimary: false, label: 'Data de Resposta' },
+    ],
+    'comments': [
+      { name: 'id', type: 'integer', required: true, isPrimary: true, label: 'ID' },
+      { name: 'product_id', type: 'integer', required: true, isPrimary: false, label: 'Produto' },
+      { name: 'user_id', type: 'integer', required: false, isPrimary: false, label: 'Usuário' },
+      { name: 'name', type: 'string', required: false, isPrimary: false, label: 'Nome (para não logados)' },
+      { name: 'content', type: 'text', required: true, isPrimary: false, label: 'Conteúdo' },
+      { name: 'created_at', type: 'datetime', required: true, isPrimary: false, label: 'Data' },
+    ],
+    'cart': [
+      { name: 'id', type: 'integer', required: true, isPrimary: true, label: 'ID' },
+      { name: 'session_id', type: 'string', required: true, isPrimary: false, label: 'ID da Sessão' },
+      { name: 'user_id', type: 'integer', required: false, isPrimary: false, label: 'Usuário' },
+      { name: 'created_at', type: 'datetime', required: true, isPrimary: false, label: 'Data de Criação' },
+      { name: 'updated_at', type: 'datetime', required: true, isPrimary: false, label: 'Data de Atualização' },
+    ],
+  };
+  
+  // Retornar campos mock para a tabela especificada ou um array vazio se não houver
+  const fields = mockFields[tableName] || [];
+  
+  // Atualizar o cache
+  if (!schemaCache[projectId]) {
+    schemaCache[projectId] = { tables: [], fields: {}, timestamp: 0 };
+  }
+  
+  if (!schemaCache[projectId].fields) {
+    schemaCache[projectId].fields = {};
+  }
+  
+  schemaCache[projectId].fields[tableName] = fields;
+  schemaCache[projectId].timestamp = Date.now();
+  
+  return fields;
+}
+
+/**
+ * Busca detalhes específicos de uma tabela
+ */
+export function getTableDetails(projectId: string, tableName: string): any {
+  // Buscar tabela do cache ou mock
+  const tables = getAvailableTables(projectId);
+  const table = tables.find(t => t.slug === tableName);
+  
+  if (!table) {
     return null;
   }
   
-  const { dataSource, operation, filters } = element.dataConnection;
-  const cacheKey = generateCacheKey(element.id, dataSource, filters);
+  // Buscar campos da tabela
+  const fields = getTableFields(projectId, tableName);
   
-  // Verificar cache
-  if (dataCache.has(cacheKey)) {
-    return dataCache.get(cacheKey);
-  }
+  // Construir detalhes completos
+  return {
+    ...table,
+    fields,
+    api: {
+      enabled: table.hasAPI,
+      basePath: `/api/${tableName}`,
+      endpoints: [
+        { method: 'GET', path: `/api/${tableName}`, description: 'Listar todos os registros' },
+        { method: 'GET', path: `/api/${tableName}/:id`, description: 'Obter registro por ID' },
+        { method: 'POST', path: `/api/${tableName}`, description: 'Criar novo registro' },
+        { method: 'PUT', path: `/api/${tableName}/:id`, description: 'Atualizar registro' },
+        { method: 'DELETE', path: `/api/${tableName}/:id`, description: 'Excluir registro' },
+      ],
+    },
+    relations: getTableRelations(projectId, tableName),
+    indexes: [],
+  };
+}
+
+/**
+ * Retorna relações para uma tabela
+ */
+function getTableRelations(projectId: string, tableName: string): any[] {
+  // Em um cenário real, isso seria buscado do backend
+  // Por enquanto, mock simples baseado em convenções de nome
+  const relations: any[] = [];
   
-  setLoadingStatus(element.id, true);
-  setErrorStatus(element.id, null);
+  const fields = getTableFields(projectId, tableName);
   
+  fields.forEach(field => {
+    // Se o campo terminar com _id, provavelmente é uma chave estrangeira
+    if (field.name.endsWith('_id')) {
+      const targetTableName = field.name.replace('_id', '');
+      // Verificar se a tabela alvo existe
+      const tables = getAvailableTables(projectId);
+      const targetExists = tables.some(t => t.slug === targetTableName || t.slug === `${targetTableName}s`);
+      
+      if (targetExists) {
+        const targetTable = tables.find(t => t.slug === targetTableName || t.slug === `${targetTableName}s`);
+        relations.push({
+          type: 'manyToOne',
+          table: targetTable?.slug || targetTableName,
+          field: field.name,
+          targetField: 'id',
+          label: `${field.label.replace(' ID', '')}`,
+        });
+      }
+    }
+  });
+  
+  return relations;
+}
+
+/**
+ * Gera dados para visualização do schema no DatabaseVisualizer
+ */
+export function getDatabaseSchemaVisualData(projectId: string): any {
+  const tables = getAvailableTables(projectId);
+  
+  // Adicionar campos a cada tabela
+  tables.forEach(table => {
+    const fields = getTableFields(projectId, table.slug);
+    table.fieldCount = fields.length;
+  });
+  
+  return { tables };
+}
+
+/**
+ * Gera um diagrama ER simples para visualização
+ */
+export function generateERDiagram(projectId: string): string {
+  const tables = getAvailableTables(projectId);
+  let diagram = 'erDiagram\n';
+  
+  // Gerar entidades
+  tables.forEach(table => {
+    const fields = getTableFields(projectId, table.slug);
+    
+    diagram += `    ${table.slug} {\n`;
+    fields.forEach(field => {
+      const nullable = field.required ? '' : '?';
+      diagram += `        ${field.type}${nullable} ${field.name}\n`;
+    });
+    diagram += '    }\n';
+    
+    // Gerar relações
+    const relations = getTableRelations(projectId, table.slug);
+    relations.forEach(relation => {
+      if (relation.type === 'manyToOne') {
+        diagram += `    ${table.slug} }o--|| ${relation.table} : "${relation.field}"\n`;
+      } else if (relation.type === 'oneToMany') {
+        diagram += `    ${table.slug} ||--o{ ${relation.table} : "${relation.field}"\n`;
+      } else if (relation.type === 'oneToOne') {
+        diagram += `    ${table.slug} ||--|| ${relation.table} : "${relation.field}"\n`;
+      } else if (relation.type === 'manyToMany') {
+        diagram += `    ${table.slug} }o--o{ ${relation.table} : "${relation.joinTable}"\n`;
+      }
+    });
+  });
+  
+  return diagram;
+}
+
+/**
+ * Cria uma nova tabela no banco de dados
+ */
+export async function createDatabaseTable(
+  tableName: string, 
+  columns: Array<{ name: string; type: string; notNull?: boolean; primary?: boolean; defaultValue?: any }>,
+  options: { timestamps?: boolean; softDelete?: boolean; description?: string } = {}
+): Promise<any> {
   try {
-    const endpoint = `/api/${dataSource}`;
+    const response = await apiRequest('POST', '/api/database/tables', {
+      tableName,
+      columns,
+      ...options
+    });
     
-    // Construir parâmetros com base nos filtros
-    const queryParams: Record<string, string> = {};
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Erro ao criar tabela');
+    }
     
-    // Adicionar filtros como parâmetros de consulta
+    // Limpar cache para forçar recarregamento dos dados
+    Object.keys(schemaCache).forEach(key => {
+      schemaCache[key].timestamp = 0;
+    });
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Erro ao criar tabela:', error);
+    throw error;
+  }
+}
+
+/**
+ * Busca registros de uma tabela com suporte a paginação e filtros
+ */
+export async function fetchTableData(
+  tableName: string,
+  options: { 
+    page?: number; 
+    limit?: number; 
+    filters?: Array<{field: string; operator: string; value: any}>;
+    filterType?: 'and' | 'or';
+    orderBy?: string;
+    orderDirection?: 'asc' | 'desc';
+  } = {}
+): Promise<{data: any[]; meta: any}> {
+  try {
+    const { page = 1, limit = 20, filters = [], filterType = 'and', orderBy, orderDirection = 'desc' } = options;
+    
+    // Construir query string para a API
+    let url = `/api/database/tables/${tableName}/data?page=${page}&limit=${limit}`;
+    
+    // Adicionar filtros se houverem
     if (filters && filters.length > 0) {
-      filters.forEach((filter: any, index: number) => {
-        if (filter.field && filter.value) {
-          queryParams[`filter_${index}_field`] = filter.field;
-          queryParams[`filter_${index}_operator`] = filter.operator || 'eq';
-          queryParams[`filter_${index}_value`] = filter.value;
+      filters.forEach((filter, index) => {
+        url += `&filter_${index}_field=${filter.field}&filter_${index}_operator=${filter.operator}`;
+        if (filter.value !== undefined && !['isNull', 'isNotNull'].includes(filter.operator)) {
+          url += `&filter_${index}_value=${encodeURIComponent(filter.value)}`;
         }
       });
     }
     
-    // Adicionar outros parâmetros com base na operação
-    if (operation === 'search' && element.dataConnection.customQuery) {
-      queryParams.q = element.dataConnection.customQuery;
+    // Adicionar ordenação
+    if (orderBy) {
+      url += `&orderBy=${orderBy}&orderDirection=${orderDirection}`;
     }
     
-    // Realizar a solicitação à API
-    const url = new URL(endpoint, window.location.origin);
-    
-    // Adicionar parâmetros de consulta
-    Object.keys(queryParams).forEach(key => {
-      url.searchParams.append(key, queryParams[key]);
-    });
-    
-    const response = await apiRequest('GET', url.toString());
+    const response = await apiRequest('GET', url);
     
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(errorText || 'Erro ao buscar dados');
+      throw new Error(`Falha ao buscar dados: ${response.statusText}`);
     }
     
-    const data = await response.json();
-    
-    // Armazenar no cache
-    dataCache.set(cacheKey, data);
-    
-    setLoadingStatus(element.id, false);
-    
-    return data;
+    return await response.json();
   } catch (error) {
-    console.error('Erro ao buscar dados para o elemento:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
-    setErrorStatus(element.id, errorMessage);
-    setLoadingStatus(element.id, false);
-    throw error;
+    console.error(`Erro ao buscar dados da tabela ${tableName}:`, error);
+    return { data: [], meta: { pagination: { total: 0, page: 1, limit: 20, pages: 0 } } };
   }
 }
 
 /**
- * Envia dados de um formulário para a API correspondente
+ * Envia dados de um formulário para o banco de dados
  */
-export async function submitFormData(formElement: Element, formData: any): Promise<any> {
-  if (!formElement.dataConnection?.configured || !formElement.dataConnection.dataSource) {
-    throw new Error('Formulário não configurado para envio de dados');
-  }
-  
-  const { dataSource, operation } = formElement.dataConnection;
-  setLoadingStatus(formElement.id, true);
-  setErrorStatus(formElement.id, null);
-  
+export async function submitFormData(
+  tableName: string,
+  data: any,
+  mode: 'create' | 'edit' = 'create',
+  recordId?: number
+): Promise<any> {
   try {
-    const endpoint = `/api/${dataSource}`;
-    const method = operation === 'update' ? 'PUT' : 'POST';
+    let url = `/api/database/tables/${tableName}/data`;
+    let method = 'POST';
     
-    // Se for uma operação de atualização, verificar se há ID nos dados
-    let url = endpoint;
-    if (operation === 'update' && formData.id) {
-      url = `${endpoint}/${formData.id}`;
+    if (mode === 'edit' && recordId) {
+      url += `/${recordId}`;
+      method = 'PUT';
     }
     
-    const response = await apiRequest(method, url, formData);
+    const response = await apiRequest(method, url, data);
     
     if (!response.ok) {
-      const errorData = await response.json().catch(() => null);
-      const errorMessage = errorData?.error || errorData?.message || `Erro ao ${operation === 'create' ? 'criar' : 'atualizar'} registro`;
-      throw new Error(errorMessage);
+      const errorData = await response.json();
+      throw new Error(errorData.error || `Falha ao ${mode === 'create' ? 'criar' : 'atualizar'} registro`);
     }
     
-    const responseData = await response.json();
-    
-    // Limpar cache relacionado
-    clearCacheForDataSource(dataSource);
-    
-    setLoadingStatus(formElement.id, false);
-    
-    // Mostrar mensagem de sucesso
-    toast({
-      title: 'Sucesso',
-      description: `Dados ${operation === 'create' ? 'criados' : 'atualizados'} com sucesso.`,
-      variant: 'success'
-    });
-    
-    return responseData;
+    return await response.json();
   } catch (error) {
-    console.error('Erro ao enviar dados do formulário:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
-    setErrorStatus(formElement.id, errorMessage);
-    setLoadingStatus(formElement.id, false);
-    
-    // Mostrar erro ao usuário
-    toast({
-      title: 'Erro',
-      description: errorMessage,
-      variant: 'destructive'
-    });
-    
+    console.error(`Erro ao ${mode === 'create' ? 'criar' : 'atualizar'} registro em ${tableName}:`, error);
     throw error;
   }
-}
-
-/**
- * Exclui um registro do banco de dados
- */
-export async function deleteRecord(dataSource: string, recordId: string | number): Promise<void> {
-  try {
-    const endpoint = `/api/${dataSource}/${recordId}`;
-    const response = await apiRequest('DELETE', endpoint);
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => null);
-      const errorMessage = errorData?.error || errorData?.message || 'Erro ao excluir registro';
-      throw new Error(errorMessage);
-    }
-    
-    // Limpar cache relacionado
-    clearCacheForDataSource(dataSource);
-    
-    // Mostrar mensagem de sucesso
-    toast({
-      title: 'Sucesso',
-      description: 'Registro excluído com sucesso.',
-      variant: 'success'
-    });
-  } catch (error) {
-    console.error('Erro ao excluir registro:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
-    
-    // Mostrar erro ao usuário
-    toast({
-      title: 'Erro',
-      description: errorMessage,
-      variant: 'destructive'
-    });
-    
-    throw error;
-  }
-}
-
-/**
- * Limpa o cache para uma fonte de dados específica
- */
-function clearCacheForDataSource(dataSource: string): void {
-  // Remover todas as entradas do cache que correspondam à fonte de dados
-  const keysToRemove: string[] = [];
-  
-  dataCache.forEach((_, key) => {
-    if (key.includes(`:${dataSource}`)) {
-      keysToRemove.push(key);
-    }
-  });
-  
-  keysToRemove.forEach(key => dataCache.delete(key));
-}
-
-/**
- * Gera automaticamente um formulário baseado em uma fonte de dados
- */
-export function generateFormFieldsFromDataSource(dataSource: string, projectId: string): DatabaseField[] {
-  const schema = getOrCreateSchema(projectId);
-  const tableSlug = dataSource.toLowerCase().replace(/\s+/g, '_');
-  
-  // Buscar tabela correspondente
-  const table = schema.tables.find(t => t.slug === tableSlug);
-  
-  if (!table || !table.fields || table.fields.length === 0) {
-    // Criar campos padrão se a tabela não existir
-    return [
-      { name: 'name', label: 'Nome', type: 'string', required: true },
-      { name: 'email', label: 'Email', type: 'string', required: true },
-      { name: 'message', label: 'Mensagem', type: 'string' }
-    ];
-  }
-  
-  return table.fields;
-}
-
-/**
- * Atualiza a definição da tabela a partir de um elemento de formulário
- */
-export function updateTableDefinitionFromFormElement(element: Element, projectId: string): void {
-  // Garantir que é um formulário configurado
-  if (element.type !== ElementTypes.form || !element.dataConnection?.configured) {
-    return;
-  }
-  
-  const schema = getOrCreateSchema(projectId);
-  
-  // Executar a atualização com esse elemento específico
-  updateSchemaFromElements(projectId, [element]);
-  
-  // Dados atualizados no schema - não é necessário retornar
-}
-
-/**
- * Busca todas as fontes de dados disponíveis e seus campos
- */
-export function getAvailableDataSources(projectId: string): { name: string; fields: string[] }[] {
-  const schema = getOrCreateSchema(projectId);
-  
-  return schema.tables.map(table => ({
-    name: table.name,
-    fields: table.fields.map(field => field.name)
-  }));
-}
-
-/**
- * Integra elementos com a API do banco de dados para operações CRUD
- */
-
-// Define a configuração de conexão de dados para um elemento selecionado
-export function configureElementDatabaseConnection(
-  element: Element,
-  config: {
-    dataSource: string;
-    operation: string;
-    fields?: string[];
-    filters?: Array<{field: string; operator: string; value: string}>;
-    customQuery?: string;
-  }
-): Element {
-  const updatedElement = {...element};
-  
-  updatedElement.dataConnection = {
-    configured: true,
-    ...config
-  };
-  
-  return updatedElement;
-}
-
-// Verifica se um componente de formulário tem uma API correspondente e atualiza automaticamente o backend
-export async function ensureFormHasAPI(formElement: Element, projectId: string): Promise<boolean> {
-  try {
-    // Verificar se o elemento é um formulário
-    if (formElement.type !== ElementTypes.form) {
-      return false;
-    }
-    
-    // Garantir que o formulário tenha uma fonte de dados configurada
-    if (!formElement.dataConnection?.configured || !formElement.dataConnection.dataSource) {
-      // Atribuir nome padrão baseado no nome do elemento ou ID
-      const formName = formElement.name || `Formulário ${formElement.id}`;
-      const dataSource = formName.toLowerCase().replace(/\s+/g, '_');
-      
-      // Configurar conexão padrão
-      formElement.dataConnection = {
-        configured: true,
-        dataSource,
-        operation: 'create',
-        fields: [] // Serão detectadas a partir dos elementos filhos
-      };
-    }
-    
-    // Atualizar o schema do banco de dados
-    updateTableDefinitionFromFormElement(formElement, projectId);
-    
-    // Verificar se há um endpoint de API correspondente
-    try {
-      const response = await apiRequest('GET', `/api/${formElement.dataConnection.dataSource}`);
-      return response.ok;
-    } catch (error) {
-      console.error('API ainda não disponível:', error);
-      // Retornar true mesmo com erro, pois o backend pode criar a API depois
-      return true;
-    }
-  } catch (error) {
-    console.error('Erro ao configurar API para formulário:', error);
-    return false;
-  }
-}
-
-// Extrai dados de elemento de formulário para um objeto
-export function extractFormData(formElement: Element, allElements: Element[]): Record<string, any> {
-  const formData: Record<string, any> = {};
-  
-  if (!formElement.children || formElement.children.length === 0) {
-    return formData;
-  }
-  
-  // Mapear IDs dos filhos para elementos reais
-  const childElements = formElement.children
-    .map(childId => allElements.find(el => el.id === childId))
-    .filter(el => el !== undefined) as Element[];
-  
-  // Processar cada elemento filho do formulário
-  for (const childEl of childElements) {
-    // Ignorar elementos sem atributo name
-    if (!childEl.htmlAttributes?.name) {
-      continue;
-    }
-    
-    const fieldName = childEl.htmlAttributes.name;
-    let fieldValue = childEl.htmlAttributes?.value || '';
-    
-    // Processar valor baseado no tipo do elemento
-    switch (childEl.type) {
-      case ElementTypes.checkbox:
-        fieldValue = childEl.htmlAttributes?.checked === 'true' || childEl.htmlAttributes?.checked === true;
-        break;
-        
-      case ElementTypes.select:
-        // Já deve ter value definido
-        break;
-        
-      case ElementTypes.input:
-        // Converter valores numéricos para numbers
-        if (childEl.htmlAttributes?.type === 'number') {
-          fieldValue = Number(fieldValue);
-        }
-        break;
-    }
-    
-    formData[fieldName] = fieldValue;
-  }
-  
-  return formData;
-}
-
-// Preenche elementos de formulário com dados
-export function populateFormWithData(formElement: Element, allElements: Element[], data: Record<string, any>): void {
-  if (!formElement.children || formElement.children.length === 0) {
-    return;
-  }
-  
-  // Mapear IDs dos filhos para elementos reais
-  const childElements = formElement.children
-    .map(childId => allElements.find(el => el.id === childId))
-    .filter(el => el !== undefined) as Element[];
-  
-  // Processar cada elemento filho do formulário
-  for (const childEl of childElements) {
-    // Ignorar elementos sem atributo name
-    if (!childEl.htmlAttributes?.name) {
-      continue;
-    }
-    
-    const fieldName = childEl.htmlAttributes.name;
-    
-    // Verificar se há dados para este campo
-    if (data[fieldName] === undefined) {
-      continue;
-    }
-    
-    const fieldValue = data[fieldName];
-    
-    // Definir valor baseado no tipo do elemento
-    switch (childEl.type) {
-      case ElementTypes.checkbox:
-        childEl.htmlAttributes.checked = Boolean(fieldValue);
-        break;
-        
-      case ElementTypes.select:
-      case ElementTypes.input:
-        childEl.htmlAttributes.value = String(fieldValue);
-        break;
-    }
-  }
-}
-
-/**
- * Retorna uma lista de operações disponíveis para elementos e formulários
- */
-export function getAvailableDatabaseOperations(elementType: ElementTypes): Array<{id: string; name: string; description: string}> {
-  // Operações para formulários
-  if (elementType === ElementTypes.form) {
-    return [
-      { id: 'create', name: 'Criar registro', description: 'Cria um novo registro no banco de dados quando o formulário é enviado.' },
-      { id: 'update', name: 'Atualizar registro', description: 'Atualiza um registro existente com os dados do formulário.' },
-      { id: 'read', name: 'Carregar registro', description: 'Carrega dados de um registro existente para o formulário.' },
-      { id: 'delete', name: 'Excluir registro', description: 'Permite excluir um registro existente.' },
-    ];
-  }
-  
-  // Operações para componentes de visualização (tabelas, cards, etc.)
-  return [
-    { id: 'get', name: 'Buscar dados', description: 'Obtém dados da base de dados para exibir no elemento.' },
-    { id: 'search', name: 'Pesquisar dados', description: 'Busca registros com base em critérios definidos.' },
-    { id: 'custom', name: 'Consulta personalizada', description: 'Define uma consulta SQL ou API personalizada.' },
-  ];
-}
-
-/**
- * Funções para visualização e gerenciamento do banco de dados
- */
-
-// Obtém informações sobre o banco de dados para exibição no editor
-export function getDatabaseSchemaVisualData(projectId: string) {
-  const schema = getOrCreateSchema(projectId);
-  
-  return {
-    tables: schema.tables.map(table => ({
-      name: table.name,
-      slug: table.slug,
-      fieldCount: table.fields.length,
-      hasAPI: table.api?.enabled,
-      description: table.description,
-      primaryFields: table.fields.slice(0, 3).map(f => f.name)
-    })),
-    tableCount: schema.tables.length,
-    viewCount: schema.views?.length || 0,
-    functionCount: schema.functions?.length || 0,
-    schemaVersion: schema.version
-  };
-}
-
-// Obtém detalhes completos de uma tabela específica
-export function getTableDetails(projectId: string, tableSlug: string) {
-  const schema = getOrCreateSchema(projectId);
-  return schema.tables.find(t => t.slug === tableSlug);
-}
-
-// Função auxiliar para gerar uma representação visual da estrutura do banco
-export function generateERDiagram(projectId: string): string {
-  const schema = getOrCreateSchema(projectId);
-  
-  let diagram = `// Diagrama ER - Projeto ${projectId}\n`;
-  diagram += '// Use https://mermaid.live/ para visualizar\n';
-  diagram += 'erDiagram\n';
-  
-  // Adicionar tabelas
-  for (const table of schema.tables) {
-    diagram += `    ${table.slug} {\n`;
-    
-    // Adicionar campos
-    for (const field of table.fields) {
-      const fieldType = field.type.toUpperCase();
-      const required = field.required ? 'NOT NULL' : 'NULL';
-      diagram += `        ${fieldType} ${field.name} ${required}\n`;
-    }
-    
-    diagram += '    }\n';
-  }
-  
-  // Adicionar relacionamentos
-  for (const table of schema.tables) {
-    if (table.relationships && table.relationships.length > 0) {
-      for (const rel of table.relationships) {
-        let notation = '';
-        
-        switch (rel.type) {
-          case 'oneToMany':
-            notation = '1--*';
-            break;
-          case 'manyToOne':
-            notation = '*--1';
-            break;
-          case 'oneToOne':
-            notation = '1--1';
-            break;
-          case 'manyToMany':
-            notation = '*--*';
-            break;
-        }
-        
-        diagram += `    ${table.slug} ${notation} ${rel.targetTable} : "${rel.type}"\n`;
-      }
-    }
-  }
-  
-  return diagram;
 }

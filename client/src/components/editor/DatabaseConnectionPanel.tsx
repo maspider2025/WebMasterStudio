@@ -1,25 +1,20 @@
 import React, { useState, useEffect } from 'react';
+import { useEditorStore } from '@/lib/editor-store';
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Element } from '@/lib/editor-store';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { 
-  getAvailableDataSources, 
-  getAvailableDatabaseOperations, 
-  configureElementDatabaseConnection,
-  fetchDataForElement,
-  getElementDatabaseStatus
-} from '@/lib/database-element-integration';
-import { useToast } from '@/hooks/use-toast';
-import { Database, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
+import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { useToast } from "@/hooks/use-toast";
+import { Database, Save, Plus, Trash2, Filter, ArrowDown, ArrowRight, Zap, RotateCw, ArrowUpDown } from 'lucide-react';
+import { getAvailableTables, getTableFields } from '@/lib/database-element-integration';
+import { Element } from '@/shared/schema';
 
 interface DatabaseConnectionPanelProps {
   element: Element;
@@ -27,468 +22,595 @@ interface DatabaseConnectionPanelProps {
   projectId?: string; // Opcional, apenas para buscar fontes de dados existentes
 }
 
-const DatabaseConnectionPanel: React.FC<DatabaseConnectionPanelProps> = ({
-  element,
-  onUpdateDatabaseConnection,
-  projectId = 'default' // Valor padrão
-}) => {
-  const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<string>('api');
-  const [selectedDataSource, setSelectedDataSource] = useState<string>(element.dataConnection?.dataSource || 'products');
-  const [selectedOperation, setSelectedOperation] = useState<string>(element.dataConnection?.operation || 'get');
-  const [isConfigured, setIsConfigured] = useState<boolean>(element.dataConnection?.configured || false);
-  const [selectedFields, setSelectedFields] = useState<string[]>(element.dataConnection?.fields || []);
-  const [filters, setFilters] = useState<any[]>(element.dataConnection?.filters || []);
-  const [customQuery, setCustomQuery] = useState<string>(element.dataConnection?.customQuery || '');
-  const [useCustomTemplate, setUseCustomTemplate] = useState<boolean>(false);
-  const [customTemplate, setCustomTemplate] = useState<string>('');
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [testResult, setTestResult] = useState<{success?: boolean; message?: string; data?: any} | null>(null);
-  
-  // Obter fontes de dados disponíveis
-  const dataSources = getAvailableDataSources(projectId);
-  
-  // Se não houver fontes de dados cadastradas, usar dados de exemplo
-  const defaultDataSources = [
-    { name: 'Produtos', fields: ['id', 'name', 'description', 'price', 'salePrice', 'sku', 'status', 'inventory', 'images'] },
-    { name: 'Categorias', fields: ['id', 'name', 'slug', 'description'] },
-    { name: 'Pedidos', fields: ['id', 'customerId', 'status', 'orderDate', 'orderTotal', 'paymentStatus', 'shippingStatus'] },
-    { name: 'Clientes', fields: ['id', 'name', 'email', 'createdAt'] },
-    { name: 'Páginas', fields: ['id', 'title', 'slug', 'content', 'status'] },
+function getOperatorLabel(operator: string): string {
+  switch (operator) {
+    case 'equals': return 'Igual a';
+    case 'notEquals': return 'Diferente de';
+    case 'contains': return 'Contém';
+    case 'startsWith': return 'Começa com';
+    case 'endsWith': return 'Termina com';
+    case 'greaterThan': return 'Maior que';
+    case 'lessThan': return 'Menor que';
+    case 'in': return 'Em (lista)';
+    case 'notIn': return 'Não em (lista)';
+    case 'isNull': return 'É nulo';
+    case 'isNotNull': return 'Não é nulo';
+    default: return operator;
+  }
+}
+
+function getOperatorOptions(fieldType: string): {value: string, label: string}[] {
+  const operators = [
+    { value: 'equals', label: 'Igual a' },
+    { value: 'notEquals', label: 'Diferente de' },
   ];
   
-  const availableDataSources = dataSources.length > 0 ? dataSources : defaultDataSources;
+  if (fieldType === 'string' || fieldType === 'text') {
+    operators.push(
+      { value: 'contains', label: 'Contém' },
+      { value: 'startsWith', label: 'Começa com' },
+      { value: 'endsWith', label: 'Termina com' },
+    );
+  }
   
-  // Operações disponíveis para o tipo de elemento
-  const operations = getAvailableDatabaseOperations(element.type);
+  if (fieldType === 'number' || fieldType === 'integer' || fieldType === 'float' || fieldType === 'date' || fieldType === 'datetime') {
+    operators.push(
+      { value: 'greaterThan', label: 'Maior que' },
+      { value: 'lessThan', label: 'Menor que' },
+    );
+  }
   
-  // Atualizar campos selecionados quando mudar a fonte de dados
+  operators.push(
+    { value: 'isNull', label: 'É nulo' },
+    { value: 'isNotNull', label: 'Não é nulo' },
+  );
+  
+  return operators;
+}
+
+const DatabaseConnectionPanel: React.FC<DatabaseConnectionPanelProps> = ({ element, onUpdateDatabaseConnection, projectId = '1' }) => {
+  const { toast } = useToast();
+  const [activeTab, setActiveTab] = useState('source');
+  
+  // Estado para o source (conexão com banco de dados)
+  const [tableName, setTableName] = useState(element.dataConnection?.tableName || '');
+  const [displayField, setDisplayField] = useState(element.dataConnection?.displayField || '');
+  const [valueField, setValueField] = useState(element.dataConnection?.valueField || 'id');
+  const [filterType, setFilterType] = useState(element.dataConnection?.filterType || 'and');
+  const [filters, setFilters] = useState(element.dataConnection?.filters || []);
+  const [limit, setLimit] = useState(element.dataConnection?.limit || 25);
+  const [orderBy, setOrderBy] = useState(element.dataConnection?.orderBy || '');
+  const [orderDirection, setOrderDirection] = useState(element.dataConnection?.orderDirection || 'desc');
+  
+  // Estado do formulário
+  const [formMode, setFormMode] = useState(element.dataConnection?.formMode || 'create');
+  const [formTable, setFormTable] = useState(element.dataConnection?.formTable || '');
+  const [formFields, setFormFields] = useState(element.dataConnection?.formFields || []);
+  const [submitRedirect, setSubmitRedirect] = useState(element.dataConnection?.submitRedirect || '');
+  const [saveButtonText, setSaveButtonText] = useState(element.dataConnection?.saveButtonText || 'Salvar');
+  
+  // Estados para dados de tabelas
+  const [availableTables, setAvailableTables] = useState<any[]>([]);
+  const [tableFields, setTableFields] = useState<any[]>([]);
+  
   useEffect(() => {
-    const dataSource = availableDataSources.find(ds => ds.name.toLowerCase() === selectedDataSource) || 
-                      availableDataSources[0];
-    
-    if (dataSource) {
-      // Se não houver campos selecionados ou se mudou a fonte de dados, selecionar todos
-      if (selectedFields.length === 0 || 
-          !element.dataConnection?.dataSource || 
-          element.dataConnection.dataSource !== selectedDataSource) {
-        setSelectedFields(dataSource.fields);
+    // Carregar tabelas disponíveis no projeto
+    try {
+      const tables = getAvailableTables(projectId);
+      setAvailableTables(tables || []);
+    } catch (error) {
+      console.error('Erro ao carregar tabelas disponíveis:', error);
+    }
+  }, [projectId]);
+  
+  useEffect(() => {
+    // Quando a tabela muda, carregar campos disponíveis
+    if (tableName) {
+      try {
+        const fields = getTableFields(projectId, tableName);
+        setTableFields(fields || []);
+      } catch (error) {
+        console.error(`Erro ao carregar campos da tabela ${tableName}:`, error);
+      }
+    } else {
+      setTableFields([]);
+    }
+  }, [projectId, tableName]);
+  
+  useEffect(() => {
+    // Quando a tabela do formulário muda, carregar campos disponíveis
+    if (formTable) {
+      try {
+        const fields = getTableFields(projectId, formTable);
+        setTableFields(fields || []);
+      } catch (error) {
+        console.error(`Erro ao carregar campos da tabela ${formTable}:`, error);
       }
     }
-  }, [selectedDataSource, availableDataSources, element.dataConnection?.dataSource]);
+  }, [projectId, formTable]);
   
-  // Novo filtro temporário
-  const [newFilter, setNewFilter] = useState({
-    field: '',
-    operator: 'equals',
-    value: ''
-  });
-  
-  // Function to handle saving the configuration
-  const handleSaveConfiguration = () => {
-    const dataSource = availableDataSources.find(ds => 
-      ds.name.toLowerCase() === selectedDataSource.toLowerCase());
-    
-    if (!dataSource) {
-      toast({
-        title: "Erro",
-        description: "Fonte de dados não encontrada",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    // Configuração para a conexão com o banco de dados
-    const connection = {
-      configured: true,
-      dataSource: selectedDataSource.toLowerCase(),
-      operation: selectedOperation,
-      fields: selectedFields,
-      filters: filters,
-      customQuery: activeTab === 'sql' ? customQuery : '',
-      template: useCustomTemplate ? customTemplate : ''
-    };
-    
-    // Atualizar o elemento
-    onUpdateDatabaseConnection(connection);
-    setIsConfigured(true);
-    
-    toast({
-      title: "Configuração salva",
-      description: "Conexão com dados configurada com sucesso",
-      variant: "success"
-    });
-  };
-  
-  // Adicionar um novo filtro
   const handleAddFilter = () => {
-    if (!newFilter.field || !newFilter.value) {
-      toast({
-        title: "Campos incompletos",
-        description: "Preencha o campo e o valor para adicionar o filtro",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    setFilters([...filters, { ...newFilter }]);
-    setNewFilter({ field: '', operator: 'equals', value: '' });
+    setFilters([
+      ...filters,
+      {
+        field: tableFields.length > 0 ? tableFields[0].name : '',
+        operator: 'equals',
+        value: ''
+      }
+    ]);
   };
   
-  // Remover um filtro existente
   const handleRemoveFilter = (index: number) => {
     setFilters(filters.filter((_, i) => i !== index));
   };
   
-  // Testar a conexão com os dados
-  const handleTestConnection = async () => {
-    setIsLoading(true);
-    setTestResult(null);
-    
-    try {
-      // Criar uma cópia do elemento com a configuração atual
-      const testElement = configureElementDatabaseConnection(
-        { ...element },
-        {
-          dataSource: selectedDataSource.toLowerCase(),
-          operation: selectedOperation,
-          fields: selectedFields,
-          filters: filters,
-          customQuery: activeTab === 'sql' ? customQuery : ''
-        }
-      );
-      
-      // Tentar buscar dados
-      const data = await fetchDataForElement(testElement);
-      
-      setTestResult({
-        success: true,
-        message: "Conexão realizada com sucesso",
-        data: data
-      });
-    } catch (error) {
-      console.error("Erro ao testar conexão:", error);
-      setTestResult({
-        success: false,
-        message: error instanceof Error ? error.message : "Erro ao conectar com os dados"
-      });
-    } finally {
-      setIsLoading(false);
-    }
+  const handleFilterChange = (index: number, field: string, value: any) => {
+    const updatedFilters = [...filters];
+    updatedFilters[index] = { ...updatedFilters[index], [field]: value };
+    setFilters(updatedFilters);
   };
   
-  const renderApiTab = () => (
-    <div className="space-y-4 p-3">
-      <div>
-        <Label className="text-sm font-medium mb-1.5 block">Fonte de Dados</Label>
-        <Select 
-          value={selectedDataSource}
-          onValueChange={setSelectedDataSource}
+  const handleSaveConnection = () => {
+    // Montando o objeto de conexão de acordo com o tipo de elemento
+    let connection: any = {};
+    
+    if (element.type === 'form') {
+      connection = {
+        formMode,
+        formTable,
+        formFields,
+        submitRedirect,
+        saveButtonText
+      };
+    } else {
+      connection = {
+        tableName,
+        displayField,
+        valueField,
+        filterType,
+        filters,
+        limit,
+        orderBy,
+        orderDirection
+      };
+    }
+    
+    // Adicionar informações comuns
+    connection.enabled = true;
+    connection.elementId = element.id;
+    
+    onUpdateDatabaseConnection(connection);
+    
+    toast({
+      title: "Conexão atualizada",
+      description: "Configurações de banco de dados atualizadas com sucesso.",
+      variant: "success"
+    });
+  };
+  
+  const renderFormConfiguration = () => (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="form-mode">Modo do Formulário</Label>
+        <Select
+          value={formMode}
+          onValueChange={setFormMode}
         >
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Selecione uma fonte de dados" />
+          <SelectTrigger id="form-mode">
+            <SelectValue placeholder="Selecione o modo do formulário" />
           </SelectTrigger>
           <SelectContent>
-            {availableDataSources.map(source => (
-              <SelectItem key={source.name} value={source.name.toLowerCase()}>{source.name}</SelectItem>
+            <SelectItem value="create">Criar (INSERT)</SelectItem>
+            <SelectItem value="edit">Editar (UPDATE)</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          Modo criar adiciona um novo registro, editar atualiza um registro existente.
+        </p>
+      </div>
+      
+      <div className="space-y-2">
+        <Label htmlFor="form-table">Tabela</Label>
+        <Select
+          value={formTable}
+          onValueChange={setFormTable}
+        >
+          <SelectTrigger id="form-table">
+            <SelectValue placeholder="Selecione a tabela" />
+          </SelectTrigger>
+          <SelectContent>
+            {availableTables.map(table => (
+              <SelectItem key={table.slug} value={table.slug}>{table.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
       
-      <div>
-        <Label className="text-sm font-medium mb-1.5 block">Operação</Label>
-        <div className="grid grid-cols-1 gap-2">
-          {operations.map(op => (
-            <Card key={op.id} className={`cursor-pointer border ${selectedOperation === op.id ? 'border-primary bg-muted/30' : 'border-border bg-background'}`}
-              onClick={() => setSelectedOperation(op.id)}
-            >
-              <CardHeader className="p-3 pb-1">
-                <CardTitle className="text-sm">{op.name}</CardTitle>
-              </CardHeader>
-              <CardContent className="p-3 pt-0">
-                <CardDescription className="text-xs">{op.description}</CardDescription>
-              </CardContent>
-            </Card>
-          ))}
+      {formTable && (
+        <div className="space-y-2">
+          <Label>Mapeamento de Campos</Label>
+          <Card>
+            <CardContent className="pt-6 pb-4">
+              <p className="text-sm text-muted-foreground mb-2">Mapeie os campos do formulário com as colunas da tabela.</p>
+              
+              {element.children?.length ? (
+                <div className="space-y-3">
+                  {element.children.map((child: any, index: number) => {
+                    // Filtrar apenas elementos de input dentro do form
+                    if (!['input', 'textarea', 'select', 'checkbox', 'radio', 'switch'].includes(child.type)) {
+                      return null;
+                    }
+                    
+                    const inputName = child.props?.name || child.props?.id || `field_${index}`;
+                    
+                    return (
+                      <div key={child.id || index} className="flex items-center space-x-2">
+                        <div className="w-1/2">
+                          <Badge variant="outline" className="text-xs">{inputName}</Badge>
+                          <span className="text-xs text-muted-foreground ml-2">
+                            {child.type === 'input' ? `(${child.props?.type || 'text'})` : `(${child.type})`}
+                          </span>
+                        </div>
+                        <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                        <div className="w-1/2">
+                          <Select
+                            value={formFields.find(f => f.input === inputName)?.field || ''}
+                            onValueChange={(value) => {
+                              const updatedFields = [...formFields];
+                              const existingIndex = updatedFields.findIndex(f => f.input === inputName);
+                              
+                              if (existingIndex >= 0) {
+                                updatedFields[existingIndex].field = value;
+                              } else {
+                                updatedFields.push({ input: inputName, field: value });
+                              }
+                              
+                              setFormFields(updatedFields);
+                            }}
+                          >
+                            <SelectTrigger className="h-8">
+                              <SelectValue placeholder="Selecione o campo" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {tableFields.map(field => (
+                                <SelectItem key={field.name} value={field.name}>{field.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="py-6 text-center text-muted-foreground italic">
+                  Adicione elementos de formulário (input, select, etc.) ao seu formulário para configurar mapeamentos.
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
+      )}
+      
+      <div className="space-y-2">
+        <Label htmlFor="submit-redirect">Redirecionamento após envio</Label>
+        <Input
+          id="submit-redirect"
+          placeholder="/sucesso ou deixe em branco para não redirecionar"
+          value={submitRedirect}
+          onChange={(e) => setSubmitRedirect(e.target.value)}
+        />
+        <p className="text-xs text-muted-foreground">
+          URL para redirecionamento após envio do formulário. Deixe em branco para permanecer na mesma página.
+        </p>
       </div>
       
-      <div>
-        <Label className="text-sm font-medium mb-1.5 block">Campos a serem exibidos</Label>
-        <ScrollArea className="h-[150px] border rounded-md p-2">
-          {availableDataSources.find(ds => ds.name.toLowerCase() === selectedDataSource)?.fields.map(field => (
-            <div key={field} className="flex items-center space-x-2 py-1">
-              <Checkbox 
-                id={`field-${field}`} 
-                checked={selectedFields.includes(field)}
-                onCheckedChange={(checked) => {
-                  if (checked) {
-                    setSelectedFields([...selectedFields, field]);
-                  } else {
-                    setSelectedFields(selectedFields.filter(f => f !== field));
-                  }
-                }}
-              />
-              <Label htmlFor={`field-${field}`} className="text-sm font-normal">{field}</Label>
-            </div>
-          ))}
-        </ScrollArea>
+      <div className="space-y-2">
+        <Label htmlFor="save-button-text">Texto do Botão</Label>
+        <Input
+          id="save-button-text"
+          placeholder="Salvar"
+          value={saveButtonText}
+          onChange={(e) => setSaveButtonText(e.target.value)}
+        />
+      </div>
+    </div>
+  );
+  
+  const renderDataSourceConfiguration = () => (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="data-table">Tabela de Dados</Label>
+        <Select
+          value={tableName}
+          onValueChange={setTableName}
+        >
+          <SelectTrigger id="data-table">
+            <SelectValue placeholder="Selecione a tabela" />
+          </SelectTrigger>
+          <SelectContent>
+            {availableTables.map(table => (
+              <SelectItem key={table.slug} value={table.slug}>{table.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       
-      {selectedOperation === 'get' && (
-        <div>
-          <div className="flex items-center justify-between">
-            <Label className="text-sm font-medium mb-1.5 block">Filtros</Label>
-            {filters.length > 0 && (
-              <Badge variant="outline" className="mb-1.5">{filters.length} filtro(s)</Badge>
-            )}
+      {tableName && (
+        <>
+          <div className="space-y-2">
+            <Label htmlFor="display-field">Campo de Exibição</Label>
+            <Select
+              value={displayField}
+              onValueChange={setDisplayField}
+            >
+              <SelectTrigger id="display-field">
+                <SelectValue placeholder="Selecione o campo de exibição" />
+              </SelectTrigger>
+              <SelectContent>
+                {tableFields.map(field => (
+                  <SelectItem key={field.name} value={field.name}>{field.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Campo que será exibido (para listas, selects, etc.).
+            </p>
           </div>
           
-          {filters.length > 0 && (
-            <div className="mb-3 border rounded-md p-2">
-              <ScrollArea className="h-[100px]">
-                {filters.map((filter, index) => (
-                  <div key={index} className="flex items-center gap-2 py-1">
-                    <div className="flex-1 flex items-center gap-1 text-xs">
-                      <Badge variant="outline" className="font-mono">{filter.field}</Badge>
-                      <span>{getOperatorLabel(filter.operator)}</span>
-                      <Badge variant="secondary" className="font-mono">{filter.value}</Badge>
-                    </div>
-                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleRemoveFilter(index)}>
-                      <span className="sr-only">Remover</span>
-                      <span aria-hidden="true">×</span>
+          <div className="space-y-2">
+            <Label htmlFor="value-field">Campo de Valor</Label>
+            <Select
+              value={valueField}
+              onValueChange={setValueField}
+            >
+              <SelectTrigger id="value-field">
+                <SelectValue placeholder="Selecione o campo de valor" />
+              </SelectTrigger>
+              <SelectContent>
+                {tableFields.map(field => (
+                  <SelectItem key={field.name} value={field.name}>{field.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Campo usado como valor/id (geralmente "id").
+            </p>
+          </div>
+          
+          <Separator className="my-4" />
+          
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <Label>Filtros</Label>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="h-7 gap-1"
+                onClick={handleAddFilter}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Adicionar Filtro
+              </Button>
+            </div>
+            
+            <div className="space-y-3">
+              {filters.length > 0 && (
+                <div className="flex items-center space-x-3 mb-1">
+                  <Label className="text-xs">Tipo de Filtro:</Label>
+                  <div className="flex items-center space-x-1">
+                    <Button
+                      variant={filterType === 'and' ? "default" : "outline"}
+                      size="sm"
+                      className="h-7 text-xs px-2 py-0"
+                      onClick={() => setFilterType('and')}
+                    >
+                      E (AND)
+                    </Button>
+                    <Button
+                      variant={filterType === 'or' ? "default" : "outline"}
+                      size="sm"
+                      className="h-7 text-xs px-2 py-0"
+                      onClick={() => setFilterType('or')}
+                    >
+                      OU (OR)
                     </Button>
                   </div>
-                ))}
-              </ScrollArea>
+                </div>
+              )}
+              
+              {filters.length === 0 ? (
+                <div className="rounded-md border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
+                  <Filter className="h-8 w-8 mx-auto mb-2 text-muted-foreground/80" />
+                  <p className="mb-1">Sem filtros configurados</p>
+                  <p>Clique em "Adicionar Filtro" para começar a filtrar os dados.</p>
+                </div>
+              ) : (
+                <Card>
+                  <CardContent className="p-3 space-y-3">
+                    <ScrollArea className="max-h-[300px]">
+                      <div className="space-y-3 pr-3">
+                        {filters.map((filter, index) => {
+                          const selectedField = tableFields.find(f => f.name === filter.field);
+                          const fieldType = selectedField?.type || 'string';
+                          
+                          return (
+                            <div key={index} className="flex items-start gap-2 pb-3 border-b last:border-b-0 last:pb-0">
+                              <div className="w-1/3">
+                                <Select
+                                  value={filter.field}
+                                  onValueChange={(value) => handleFilterChange(index, 'field', value)}
+                                >
+                                  <SelectTrigger className="h-8">
+                                    <SelectValue placeholder="Campo" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {tableFields.map(field => (
+                                      <SelectItem key={field.name} value={field.name}>{field.name}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              
+                              <div className="w-1/3">
+                                <Select
+                                  value={filter.operator}
+                                  onValueChange={(value) => handleFilterChange(index, 'operator', value)}
+                                >
+                                  <SelectTrigger className="h-8">
+                                    <SelectValue placeholder="Operador" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {getOperatorOptions(fieldType).map(op => (
+                                      <SelectItem key={op.value} value={op.value}>{op.label}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              
+                              <div className="w-1/4">
+                                {!['isNull', 'isNotNull'].includes(filter.operator) && (
+                                  <Input
+                                    className="h-8"
+                                    placeholder="Valor"
+                                    value={filter.value}
+                                    onChange={(e) => handleFilterChange(index, 'value', e.target.value)}
+                                  />
+                                )}
+                              </div>
+                              
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                onClick={() => handleRemoveFilter(index)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              )}
             </div>
-          )}
+          </div>
           
-          <div className="grid grid-cols-3 gap-2">
-            <Select 
-              value={newFilter.operator}
-              onValueChange={(value) => setNewFilter({...newFilter, operator: value})}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Operador" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="equals">É igual a</SelectItem>
-                <SelectItem value="notEquals">Não é igual a</SelectItem>
-                <SelectItem value="contains">Contém</SelectItem>
-                <SelectItem value="greaterThan">Maior que</SelectItem>
-                <SelectItem value="lessThan">Menor que</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select 
-              value={newFilter.field}
-              onValueChange={(value) => setNewFilter({...newFilter, field: value})}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Campo" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableDataSources.find(ds => ds.name.toLowerCase() === selectedDataSource)?.fields.map(field => (
-                  <SelectItem key={field} value={field}>{field}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Input 
-              placeholder="Valor" 
-              className="w-full" 
-              value={newFilter.value}
-              onChange={(e) => setNewFilter({...newFilter, value: e.target.value})}
+          <Separator className="my-4" />
+          
+          <div className="space-y-2">
+            <Label htmlFor="order-by">Ordenação</Label>
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <Select
+                  value={orderBy}
+                  onValueChange={setOrderBy}
+                >
+                  <SelectTrigger id="order-by">
+                    <SelectValue placeholder="Ordenar por" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Padrão (id)</SelectItem>
+                    {tableFields.map(field => (
+                      <SelectItem key={field.name} value={field.name}>{field.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="flex-initial">
+                <Select
+                  value={orderDirection}
+                  onValueChange={setOrderDirection}
+                >
+                  <SelectTrigger id="order-direction" className="w-[120px]">
+                    <SelectValue placeholder="Direção" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="asc">
+                      <div className="flex items-center gap-1">
+                        <ArrowUpDown className="h-3.5 w-3.5 rotate-180" />
+                        Crescente
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="desc">
+                      <div className="flex items-center gap-1">
+                        <ArrowUpDown className="h-3.5 w-3.5" />
+                        Decrescente
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <Label htmlFor="result-limit">Limite de Resultados: {limit}</Label>
+            </div>
+            <Slider
+              id="result-limit"
+              value={[limit]}
+              onValueChange={(values) => setLimit(values[0])}
+              min={1}
+              max={100}
+              step={1}
             />
+            <p className="text-xs text-muted-foreground">
+              Quantidade máxima de resultados retornados. (1-100)
+            </p>
           </div>
-          <div className="mt-2 flex justify-end">
-            <Button size="sm" variant="outline" onClick={handleAddFilter}>
-              Adicionar Filtro
-            </Button>
-          </div>
-        </div>
+        </>
       )}
     </div>
   );
   
-  const renderSqlTab = () => (
-    <div className="space-y-4 p-3">
-      <Label className="text-sm font-medium mb-1.5 block">Consulta SQL personalizada</Label>
-      <Textarea 
-        className="min-h-[200px] font-mono text-sm"
-        placeholder="SELECT * FROM produtos WHERE status = 'published'"
-        value={customQuery}
-        onChange={(e) => setCustomQuery(e.target.value)}
-      />
-      <div className="flex items-center space-x-2">
-        <Switch id="auto-execute" />
-        <Label htmlFor="auto-execute">Executar automaticamente ao carregar</Label>
-      </div>
-    </div>
-  );
-  
-  const renderTemplatingTab = () => (
-    <div className="space-y-4 p-3">
-      <div>
-        <Label className="text-sm font-medium mb-1.5 block">Template HTML para exibição de dados</Label>
-        <Textarea 
-          className="min-h-[200px] font-mono text-sm"
-          placeholder={`<div class="product-list">
-  {{#each data}}
-    <div class="product-item">
-      <h3>{{name}}</h3>
-      <p>{{description}}</p>
-      <span class="price">R$ {{price}}</span>
-    </div>
-  {{/each}}
-</div>`}
-          value={customTemplate}
-          onChange={(e) => setCustomTemplate(e.target.value)}
-        />
-      </div>
-      <div className="flex items-center space-x-2">
-        <Switch 
-          id="use-template" 
-          checked={useCustomTemplate}
-          onCheckedChange={setUseCustomTemplate}
-        />
-        <Label htmlFor="use-template">Usar template personalizado</Label>
-      </div>
-    </div>
-  );
-  
-  if (!isConfigured) {
-    return (
-      <div className="p-4 space-y-4">
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="w-full grid grid-cols-3">
-            <TabsTrigger value="api">API</TabsTrigger>
-            <TabsTrigger value="sql">SQL</TabsTrigger>
-            <TabsTrigger value="templating">Template</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="api" className="mt-4">
-            {renderApiTab()}
-          </TabsContent>
-          
-          <TabsContent value="sql" className="mt-4">
-            {renderSqlTab()}
-          </TabsContent>
-          
-          <TabsContent value="templating" className="mt-4">
-            {renderTemplatingTab()}
-          </TabsContent>
-        </Tabs>
-        
-        <div className="flex justify-end">
-          <Button onClick={handleSaveConfiguration}>Salvar Configuração</Button>
-        </div>
-      </div>
-    );
-  }
-  
-  // Buscar status atual de operações do elemento
-  const operationStatus = element.id ? getElementDatabaseStatus(element.id) : null;
-  
   return (
-    <div className="p-4 space-y-4">
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center">
-            <Database className="h-4 w-4 mr-2 text-muted-foreground" />
-            Configuração de Dados
-          </CardTitle>
-          <CardDescription className="text-xs">
-            Este elemento está conectado a <span className="font-medium">
-              {availableDataSources.find(ds => ds.name.toLowerCase() === element.dataConnection?.dataSource)?.name || element.dataConnection?.dataSource || 'dados'}
-            </span> e 
-            usa a operação <span className="font-medium">
-              {operations.find(op => op.id === element.dataConnection?.operation)?.name || element.dataConnection?.operation || 'busca'}
-            </span>.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="py-0">
-          {element.dataConnection?.fields && element.dataConnection.fields.length > 0 && (
-            <div className="text-xs text-muted-foreground mb-2">
-              <strong>Campos:</strong> {element.dataConnection.fields.join(', ')}
-            </div>
-          )}
-          {element.dataConnection?.filters && element.dataConnection.filters.length > 0 && (
-            <div className="text-xs text-muted-foreground">
-              <strong>Filtros:</strong> {element.dataConnection.filters.length} filtro(s) aplicado(s)
-            </div>
-          )}
-        </CardContent>
-        <CardFooter className="pt-2">
-          <Button variant="outline" size="sm"
-            onClick={() => setIsConfigured(false)}
-          >
-            Editar Configuração
-          </Button>
-        </CardFooter>
-      </Card>
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <div className="flex items-center gap-2">
+          <Database className="h-5 w-5 text-primary" />
+          <h2 className="text-lg font-medium">Conexão com Banco de Dados</h2>
+        </div>
+      </div>
       
-      <div className="border rounded-md">
-        <div className="p-3 border-b">
-          <h3 className="text-sm font-medium flex items-center">
-            <Database className="h-4 w-4 mr-2 text-muted-foreground" />
-            Teste de conexão
-          </h3>
-        </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="w-full">
+          {element.type === 'form' ? (
+            <TabsTrigger className="flex-1" value="form">
+              <RotateCw className="h-4 w-4 mr-2" />
+              Configuração do Formulário
+            </TabsTrigger>
+          ) : (
+            <TabsTrigger className="flex-1" value="source">
+              <Database className="h-4 w-4 mr-2" />
+              Fonte de Dados
+            </TabsTrigger>
+          )}
+        </TabsList>
         
-        <div className="p-3">
-          {testResult && (
-            <div className={`mb-3 p-2 rounded-md ${testResult.success ? 'bg-green-50 text-green-800 dark:bg-green-950 dark:text-green-300' : 'bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-300'} text-sm`}>
-              <div className="flex items-center">
-                {testResult.success ? (
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                ) : (
-                  <AlertTriangle className="h-4 w-4 mr-2" />
-                )}
-                {testResult.message}
-              </div>
-            </div>
-          )}
-          
-          {operationStatus?.error && !testResult && (
-            <div className="mb-3 p-2 rounded-md bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-300 text-sm">
-              <div className="flex items-center">
-                <AlertTriangle className="h-4 w-4 mr-2" />
-                {operationStatus.error}
-              </div>
-            </div>
-          )}
-          
-          <Button 
-            className="w-full" 
-            size="sm"
-            onClick={handleTestConnection}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Testando...
-              </>
-            ) : 'Executar Consulta de Teste'}
-          </Button>
-        </div>
+        {element.type === 'form' ? (
+          <TabsContent value="form" className="space-y-4 py-4">
+            {renderFormConfiguration()}
+          </TabsContent>
+        ) : (
+          <TabsContent value="source" className="space-y-4 py-4">
+            {renderDataSourceConfiguration()}
+          </TabsContent>
+        )}
+      </Tabs>
+      
+      <div className="flex justify-end">
+        <Button onClick={handleSaveConnection} className="gap-1">
+          <Save className="h-4 w-4" />
+          Salvar Configurações
+        </Button>
       </div>
     </div>
   );
 };
-
-// Função auxiliar para obter label do operador
-function getOperatorLabel(operator: string): string {
-  const operators: Record<string, string> = {
-    'equals': 'é igual a',
-    'notEquals': 'não é igual a',
-    'contains': 'contém',
-    'greaterThan': 'maior que',
-    'lessThan': 'menor que'
-  };
-  
-  return operators[operator] || operator;
-}
 
 export default DatabaseConnectionPanel;

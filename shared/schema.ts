@@ -48,6 +48,8 @@ export const elements = pgTable("elements", {
   x: integer("x").notNull(),
   y: integer("y").notNull(),
   width: integer("width").notNull(),
+  // Propriedades para conexão com banco de dados
+  dataConnection: jsonb("data_connection"),
   height: integer("height").notNull(),
   content: text("content"),
   src: text("src"),
@@ -614,3 +616,28 @@ export type CartItem = typeof cartItems.$inferSelect;
 
 export type InsertSetting = z.infer<typeof insertSettingSchema>;
 export type Setting = typeof settings.$inferSelect;
+
+// Interface para tipo Element, incluindo propriedades de conexão com banco de dados
+export interface DatabaseConnection {
+  tableName?: string;
+  displayField?: string;
+  valueField?: string;
+  filterType?: 'and' | 'or';
+  filters?: Array<{field: string; operator: string; value: any}>;
+  limit?: number;
+  orderBy?: string;
+  orderDirection?: 'asc' | 'desc';
+  formMode?: 'create' | 'edit';
+  formTable?: string;
+  formFields?: Array<{input: string; field: string}>;
+  submitRedirect?: string;
+  saveButtonText?: string;
+  enabled?: boolean;
+  elementId?: number;
+}
+
+export interface Element extends typeof elements.$inferSelect {
+  dataConnection?: DatabaseConnection;
+  props?: any;
+  children?: Element[];
+}

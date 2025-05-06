@@ -13,6 +13,7 @@ import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, Tabl
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { Database, Search, ArrowRight, ChevronDown, Table as TableIcon, List, Archive, BookOpen, Code, Edit, Eye, Trash, ExternalLink, ChevronRight, Code2, Layers, Filter, RefreshCw, FileText, DownloadCloud, PlusCircle, Play } from 'lucide-react';
+import NewDatabaseTable from './NewDatabaseTable';
 
 interface DatabaseVisualizerProps {
   projectId: string;
@@ -71,22 +72,40 @@ const DatabaseVisualizer: React.FC<DatabaseVisualizerProps> = ({ projectId }) =>
     table.slug.toLowerCase().includes(searchQuery.toLowerCase())
   ) || [];
   
+  const handleTableCreated = (tableName: string) => {
+    handleRefresh();
+    setSelectedTable(tableName);
+  };
+
   const renderTablesList = () => (
     <div className="space-y-4">
-      <div className="flex items-center space-x-2">
-        <Search className="h-4 w-4 text-muted-foreground" />
-        <Input 
-          placeholder="Buscar tabelas..."
-          className="h-8"
-          value={searchQuery}
-          onChange={handleSearchChange}
-        />
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-2 flex-1">
+          <Search className="h-4 w-4 text-muted-foreground" />
+          <Input 
+            placeholder="Buscar tabelas..."
+            className="h-8"
+            value={searchQuery}
+            onChange={handleSearchChange}
+          />
+        </div>
+        <div className="ml-2">
+          <NewDatabaseTable onTableCreated={handleTableCreated} />
+        </div>
       </div>
       
       <ScrollArea className="h-[calc(100vh-250px)] pr-4">
         {filteredTables.length === 0 ? (
-          <div className="py-4 text-center text-muted-foreground italic">
-            {searchQuery ? 'Nenhuma tabela encontrada' : 'Nenhuma tabela definida'}
+          <div className="py-8 text-center">
+            <div className="inline-flex items-center justify-center p-4 bg-muted rounded-full mb-4">
+              <Database className="h-6 w-6 text-muted-foreground" />
+            </div>
+            <h3 className="text-lg font-medium mb-2">Nenhuma tabela encontrada</h3>
+            <p className="text-sm text-muted-foreground mb-4 max-w-md mx-auto">
+              {searchQuery 
+                ? 'Tente modificar sua busca ou crie uma nova tabela.' 
+                : 'Crie sua primeira tabela para começar a gerenciar seus dados.'}
+            </p>
           </div>
         ) : (
           <div className="space-y-2">
