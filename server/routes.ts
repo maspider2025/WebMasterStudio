@@ -5614,27 +5614,17 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
       const columns = Object.keys(validatedData);
       const values = Object.values(validatedData);
       
-      // Criar parâmetros para a query usando sql.placeholder
-      const params = [];
-      const placeholders = [];
+      // Construir a query manualmente com valores
+      const columnsSql = columns.map(col => sql.identifier(col));
+      const valuesSql = values.map(val => sql`${val}`);
       
-      // Criar placeholders nomeados para cada valor
-      for (let i = 0; i < values.length; i++) {
-        // Usar nomes de placeholders sequenciais
-        const placeholderName = `param${i}`;
-        // Adicionar ao array de params para sql.placeholder
-        params.push(sql.placeholder(placeholderName, values[i]));
-        // Adicionar o placeholderà string de placeholders
-        placeholders.push(sql.placeholder(placeholderName));
-      }
-      
-      // Construir a query com placeholders nomeados
+      // Construir a query diretamente com valores
       const insertQuery = sql`
-        INSERT INTO ${sql.identifier(fullTableName)} (${sql.join(
-          columns.map(col => sql.identifier(col)),
-          sql`, `
-        )})
-        VALUES (${sql.join(placeholders, sql`, `)})
+        INSERT INTO ${sql.identifier(fullTableName)} (
+          ${sql.join(columnsSql, sql`, `)}
+        ) VALUES (
+          ${sql.join(valuesSql, sql`, `)}
+        )
         RETURNING *
       `;
       
@@ -5776,26 +5766,15 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
         validatedData['updated_at'] = new Date();
       }
       
-      // Criar parâmetros para a query usando sql.placeholder
-      const params = [];
-      const setItems = [];
-      const entries = Object.entries(validatedData);
+      // Construir a query manualmente com valores
+      const updateItems = Object.entries(validatedData).map(
+        ([key, value]) => sql`${sql.identifier(key)} = ${value}`
+      );
       
-      // Criar placeholders nomeados para cada valor
-      for (let i = 0; i < entries.length; i++) {
-        const [key, value] = entries[i];
-        // Usar nomes de placeholders sequenciais
-        const placeholderName = `param${i}`;
-        // Adicionar ao array de params para sql.placeholder
-        params.push(sql.placeholder(placeholderName, value));
-        // Adicionar o parâmetro ao SET clause
-        setItems.push(sql`${sql.identifier(key)} = ${sql.placeholder(placeholderName)}`);
-      }
-      
-      // Construir a query com placeholders nomeados
+      // Construir a query diretamente com valores
       const updateQuery = sql`
         UPDATE ${sql.identifier(fullTableName)}
-        SET ${sql.join(setItems, sql`, `)}
+        SET ${sql.join(updateItems, sql`, `)}
         WHERE id = ${id}
         RETURNING *
       `;
