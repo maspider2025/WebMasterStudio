@@ -1,7 +1,18 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertUserSchema, insertProjectSchema, insertPageSchema, insertElementSchema } from "@shared/schema";
+import { insertUserSchema, insertProjectSchema, insertPageSchema, insertElementSchema, insertProductSchema, insertProductCategorySchema, insertProductVariantSchema, insertCartSchema, insertCartItemSchema } from "@shared/schema";
+import { eq, and, desc, like, or, sql } from "drizzle-orm";
+import { db } from "@db";
+import * as schema from "@shared/schema";
+import { randomUUID } from "crypto";
+import Stripe from "stripe";
+import { createPaypalOrder, capturePaypalOrder, loadPaypalDefault } from "./paypal";
+
+// Initialize Stripe
+const stripeInstance = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, {
+  apiVersion: "2023-10-16",
+}) : null;
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // API routes prefix
