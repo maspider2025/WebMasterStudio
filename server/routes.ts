@@ -2680,6 +2680,987 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Endpoints para Métodos de Envio
+
+  // Listar métodos de envio disponíveis
+  app.get(`${apiPrefix}/projects/:projectId/shipping-methods`, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const { active } = req.query;
+      
+      // Construir consulta base
+      let query = and(
+        eq(schema.shippingMethods.projectId, projectId)
+      );
+      
+      // Filtrar por status ativo/inativo
+      if (active === 'true') {
+        query = and(query, eq(schema.shippingMethods.isActive, true));
+      } else if (active === 'false') {
+        query = and(query, eq(schema.shippingMethods.isActive, false));
+      }
+      
+      // Buscar métodos de envio com filtros aplicados
+      const shippingMethods = await db.query.shippingMethods.findMany({
+        where: query,
+        orderBy: [asc(schema.shippingMethods.displayOrder)]
+      });
+      
+      return res.status(200).json(shippingMethods);
+    } catch (error) {
+      return handleError(res, error, 'Erro ao listar métodos de envio');
+    }
+  });
+  
+  // Obter detalhes de um método de envio
+  app.get(`${apiPrefix}/projects/:projectId/shipping-methods/:methodId`, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const methodId = parseInt(req.params.methodId);
+      
+      const shippingMethod = await db.query.shippingMethods.findFirst({
+        where: and(
+          eq(schema.shippingMethods.id, methodId),
+          eq(schema.shippingMethods.projectId, projectId)
+        )
+      });
+      
+      if (!shippingMethod) {
+        return res.status(404).json({ message: 'Método de envio não encontrado' });
+      }
+      
+      // Adicionar informações extras para exibição
+      const formattedMethod = {
+        ...shippingMethod,
+        formattedPrice: shippingMethod.fixedPrice !== null 
+          ? `R$ ${shippingMethod.fixedPrice.toFixed(2)}` 
+          : 'Personalizado',
+        statusText: shippingMethod.isActive ? 'Ativo' : 'Inativo',
+        methodTypeText: shippingMethod.type === 'fixed' 
+          ? 'Taxa fixa' 
+          : shippingMethod.type === 'custom' 
+            ? 'Personalizado' 
+            : 'Frete calculado'
+      };
+      
+      return res.status(200).json(formattedMethod);
+    } catch (error) {
+      return handleError(res, error, 'Erro ao buscar detalhes do método de envio');
+    }
+  });
+  
+  // Criar um novo método de envio
+  app.post(`${apiPrefix}/projects/:projectId/shipping-methods`, isAuthenticated, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const userId = req.session?.userId || (req.user ? req.user.id : null);
+      
+      if (!userId) {
+        return res.status(401).json({ message: 'Usuário não autenticado' });
+      }
+      
+      // Encontrar maior displayOrder existente para definir a ordem do novo método
+      const existingMethods = await db.query.shippingMethods.findMany({
+        where: eq(schema.shippingMethods.projectId, projectId),
+        orderBy: [desc(schema.shippingMethods.displayOrder)],
+        limit: 1
+      });
+      
+      const nextDisplayOrder = existingMethods.length > 0 
+        ? existingMethods[0].displayOrder + 1 
+        : 1;
+      
+      // Validar dados do método de envio
+      const shippingMethodData = insertShippingMethodSchema.parse({
+        ...req.body,
+        projectId,
+        displayOrder: req.body.displayOrder || nextDisplayOrder,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+      
+      // Criar método de envio
+      const newShippingMethod = await db.insert(schema.shippingMethods)
+        .values(shippingMethodData)
+        .returning();
+      
+      res.status(201).json({
+        ...newShippingMethod[0],
+        message: `Método de envio '${shippingMethodData.name}' criado com sucesso`
+      });
+    } catch (error) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ 
+          message: 'Dados inválidos para o método de envio', 
+          errors: error.errors 
+        });
+      }
+      return handleError(res, error, 'Erro ao criar método de envio');
+    }
+  });
+  
+  // Atualizar um método de envio
+  app.patch(`${apiPrefix}/projects/:projectId/shipping-methods/:methodId`, isAuthenticated, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const methodId = parseInt(req.params.methodId);
+      const userId = req.session?.userId || (req.user ? req.user.id : null);
+      
+      if (!userId) {
+        return res.status(401).json({ message: 'Usuário não autenticado' });
+      }
+      
+      // Verificar se o método de envio existe
+      const shippingMethod = await db.query.shippingMethods.findFirst({
+        where: and(
+          eq(schema.shippingMethods.id, methodId),
+          eq(schema.shippingMethods.projectId, projectId)
+        )
+      });
+      
+      if (!shippingMethod) {
+        return res.status(404).json({ message: 'Método de envio não encontrado' });
+      }
+      
+      // Construir objeto com dados a serem atualizados
+      const updateData = {
+        ...req.body,
+        updatedAt: new Date()
+      };
+      
+      // Remover campos que não devem ser atualizados
+      delete updateData.id;
+      delete updateData.projectId;
+      delete updateData.createdAt;
+      
+      // Atualizar o método de envio
+      const updatedMethod = await db.update(schema.shippingMethods)
+        .set(updateData)
+        .where(and(
+          eq(schema.shippingMethods.id, methodId),
+          eq(schema.shippingMethods.projectId, projectId)
+        ))
+        .returning();
+      
+      res.status(200).json({
+        ...updatedMethod[0],
+        message: `Método de envio atualizado com sucesso`
+      });
+    } catch (error) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ 
+          message: 'Dados inválidos para atualização do método de envio', 
+          errors: error.errors 
+        });
+      }
+      return handleError(res, error, 'Erro ao atualizar método de envio');
+    }
+  });
+  
+  // Excluir um método de envio
+  app.delete(`${apiPrefix}/projects/:projectId/shipping-methods/:methodId`, isAuthenticated, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const methodId = parseInt(req.params.methodId);
+      const userId = req.session?.userId || (req.user ? req.user.id : null);
+      
+      if (!userId) {
+        return res.status(401).json({ message: 'Usuário não autenticado' });
+      }
+      
+      // Verificar se o método de envio existe
+      const shippingMethod = await db.query.shippingMethods.findFirst({
+        where: and(
+          eq(schema.shippingMethods.id, methodId),
+          eq(schema.shippingMethods.projectId, projectId)
+        )
+      });
+      
+      if (!shippingMethod) {
+        return res.status(404).json({ message: 'Método de envio não encontrado' });
+      }
+      
+      // Excluir o método de envio
+      await db.delete(schema.shippingMethods)
+        .where(and(
+          eq(schema.shippingMethods.id, methodId),
+          eq(schema.shippingMethods.projectId, projectId)
+        ));
+      
+      res.status(200).json({ 
+        message: `Método de envio '${shippingMethod.name}' excluído com sucesso`
+      });
+    } catch (error) {
+      return handleError(res, error, 'Erro ao excluir método de envio');
+    }
+  });
+  
+  // Calcular custo de envio para um pedido
+  app.post(`${apiPrefix}/projects/:projectId/calculate-shipping`, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const { 
+        items, 
+        destination, 
+        postalCode, 
+        methodId,
+        subtotal
+      } = req.body;
+      
+      // Validar dados de entrada
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ message: 'Itens do pedido são obrigatórios' });
+      }
+      
+      // Se methodId foi fornecido, calcular para método específico
+      if (methodId) {
+        const shippingMethod = await db.query.shippingMethods.findFirst({
+          where: and(
+            eq(schema.shippingMethods.id, parseInt(methodId)),
+            eq(schema.shippingMethods.projectId, projectId),
+            eq(schema.shippingMethods.isActive, true)
+          )
+        });
+        
+        if (!shippingMethod) {
+          return res.status(404).json({ message: 'Método de envio não encontrado ou inativo' });
+        }
+        
+        // Calcular o custo de envio baseado no tipo de método
+        let shippingCost = 0;
+        let estimatedDeliveryDays = null;
+        
+        if (shippingMethod.type === 'fixed') {
+          // Para método de taxa fixa, usar o valor configurado
+          shippingCost = shippingMethod.fixedPrice || 0;
+          estimatedDeliveryDays = shippingMethod.estimatedDeliveryTime || null;
+        } else if (shippingMethod.type === 'calculated') {
+          // Para método calculado, usar regras definidas (baseado em peso, distância, etc.)
+          // Implementação simplificada para demonstração
+          const totalWeight = items.reduce((sum, item) => {
+            return sum + (item.weight || 0) * (item.quantity || 1);
+          }, 0);
+          
+          // Regras básicas de cálculo (personalizadas para cada loja)
+          if (shippingMethod.settings?.rules) {
+            const rules = shippingMethod.settings.rules;
+            for (const rule of rules) {
+              if (rule.type === 'weight_based' && totalWeight <= rule.maxWeight) {
+                shippingCost = rule.price;
+                break;
+              }
+            }
+          } else {
+            // Regra padrão baseada no peso
+            shippingCost = Math.max(shippingMethod.minimumPrice || 0, totalWeight * 0.5);
+          }
+          
+          estimatedDeliveryDays = shippingMethod.estimatedDeliveryTime || null;
+        } else if (shippingMethod.type === 'free') {
+          // Frete grátis - verificar se há valor mínimo
+          const orderTotal = subtotal || 0;
+          if (shippingMethod.minimumOrderValue && orderTotal < shippingMethod.minimumOrderValue) {
+            shippingCost = shippingMethod.fixedPrice || 0; // Cobra taxa se não atingir o mínimo
+          } else {
+            shippingCost = 0; // Frete grátis
+          }
+          estimatedDeliveryDays = shippingMethod.estimatedDeliveryTime || null;
+        } else if (shippingMethod.type === 'table_based') {
+          // Baseado em tabela de valores por região ou distancia
+          // Lógica simplificada para demonstração
+          const region = destination?.region || '';
+          if (shippingMethod.settings?.regions && shippingMethod.settings.regions[region]) {
+            shippingCost = shippingMethod.settings.regions[region] || shippingMethod.fixedPrice || 0;
+          } else {
+            shippingCost = shippingMethod.fixedPrice || 0;
+          }
+          estimatedDeliveryDays = shippingMethod.estimatedDeliveryTime || null;
+        }
+        
+        // Adicionar informações de exibição
+        return res.status(200).json({
+          method: {
+            id: shippingMethod.id,
+            name: shippingMethod.name,
+            description: shippingMethod.description,
+            type: shippingMethod.type,
+            cost: shippingCost,
+            formattedCost: `R$ ${shippingCost.toFixed(2)}`,
+            estimatedDeliveryDays,
+            estimatedDeliveryText: estimatedDeliveryDays 
+              ? `Entrega em aproximadamente ${estimatedDeliveryDays} dias úteis` 
+              : null
+          }
+        });
+      }
+      
+      // Se methodId não for fornecido, retornar todos os métodos disponíveis com seus custos calculados
+      const availableMethods = await db.query.shippingMethods.findMany({
+        where: and(
+          eq(schema.shippingMethods.projectId, projectId),
+          eq(schema.shippingMethods.isActive, true)
+        ),
+        orderBy: [asc(schema.shippingMethods.displayOrder)]
+      });
+      
+      // Calcular o custo para cada método disponível
+      const shippingOptions = await Promise.all(availableMethods.map(async (method) => {
+        let shippingCost = 0;
+        let estimatedDeliveryDays = null;
+        let isAvailable = true;
+        let unavailableReason = null;
+        
+        try {
+          // Cálculo similar ao acima, mas para cada método
+          if (method.type === 'fixed') {
+            shippingCost = method.fixedPrice || 0;
+          } else if (method.type === 'calculated') {
+            const totalWeight = items.reduce((sum, item) => {
+              return sum + (item.weight || 0) * (item.quantity || 1);
+            }, 0);
+            
+            if (method.settings?.rules) {
+              const rules = method.settings.rules;
+              for (const rule of rules) {
+                if (rule.type === 'weight_based' && totalWeight <= rule.maxWeight) {
+                  shippingCost = rule.price;
+                  break;
+                }
+              }
+            } else {
+              shippingCost = Math.max(method.minimumPrice || 0, totalWeight * 0.5);
+            }
+          } else if (method.type === 'free') {
+            const orderTotal = subtotal || 0;
+            if (method.minimumOrderValue && orderTotal < method.minimumOrderValue) {
+              shippingCost = method.fixedPrice || 0;
+              isAvailable = true;
+              unavailableReason = `Adicione R$ ${(method.minimumOrderValue - orderTotal).toFixed(2)} ao pedido para frete grátis`;
+            } else {
+              shippingCost = 0;
+            }
+          } else if (method.type === 'table_based') {
+            const region = destination?.region || '';
+            if (method.settings?.regions && method.settings.regions[region]) {
+              shippingCost = method.settings.regions[region] || method.fixedPrice || 0;
+            } else {
+              shippingCost = method.fixedPrice || 0;
+            }
+          }
+          
+          estimatedDeliveryDays = method.estimatedDeliveryTime || null;
+        } catch (err) {
+          console.error(`Erro ao calcular frete para o método ${method.name}:`, err);
+          isAvailable = false;
+          unavailableReason = 'Erro ao calcular frete para este método';
+        }
+        
+        return {
+          id: method.id,
+          name: method.name,
+          description: method.description,
+          type: method.type,
+          cost: shippingCost,
+          formattedCost: `R$ ${shippingCost.toFixed(2)}`,
+          estimatedDeliveryDays,
+          estimatedDeliveryText: estimatedDeliveryDays 
+            ? `Entrega em aproximadamente ${estimatedDeliveryDays} dias úteis` 
+            : null,
+          isAvailable,
+          unavailableReason
+        };
+      }));
+      
+      // Filtrar apenas os métodos disponíveis
+      const availableOptions = shippingOptions.filter(option => option.isAvailable);
+      
+      res.status(200).json({
+        methods: availableOptions,
+        totalAvailable: availableOptions.length
+      });
+    } catch (error) {
+      return handleError(res, error, 'Erro ao calcular opções de envio');
+    }
+  });
+
+  // Endpoints para Product Tags (Tags de Produtos)
+
+  // Listar todas as tags disponíveis
+  app.get(`${apiPrefix}/projects/:projectId/product-tags`, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      
+      // Buscar as tags do projeto ordenadas por nome
+      const tags = await db.query.productTags.findMany({
+        where: eq(schema.productTags.projectId, projectId),
+        orderBy: [asc(schema.productTags.name)]
+      });
+      
+      // Contar quantos produtos estão associados a cada tag
+      const tagsWithCounts = await Promise.all(tags.map(async (tag) => {
+        const relations = await db.query.productTagRelations.findMany({
+          where: and(
+            eq(schema.productTagRelations.tagId, tag.id),
+            eq(schema.productTagRelations.projectId, projectId)
+          )
+        });
+        
+        // Quantidade total de produtos associados a esta tag
+        const productCount = relations.length;
+        
+        // Formatar a cor da tag como estilo CSS
+        const tagStyle = tag.color ? { backgroundColor: tag.color } : undefined;
+        
+        return {
+          ...tag,
+          productCount,
+          tagStyle
+        };
+      }));
+      
+      return res.status(200).json(tagsWithCounts);
+    } catch (error) {
+      return handleError(res, error, 'Erro ao listar tags de produtos');
+    }
+  });
+  
+  // Obter detalhes de uma tag específica
+  app.get(`${apiPrefix}/projects/:projectId/product-tags/:tagId`, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const tagId = parseInt(req.params.tagId);
+      
+      // Buscar a tag
+      const tag = await db.query.productTags.findFirst({
+        where: and(
+          eq(schema.productTags.id, tagId),
+          eq(schema.productTags.projectId, projectId)
+        )
+      });
+      
+      if (!tag) {
+        return res.status(404).json({ message: 'Tag não encontrada' });
+      }
+      
+      // Buscar produtos associados a esta tag
+      const taggedProducts = await db.query.productTagRelations.findMany({
+        where: and(
+          eq(schema.productTagRelations.tagId, tagId),
+          eq(schema.productTagRelations.projectId, projectId)
+        ),
+        with: {
+          product: {
+            columns: {
+              id: true,
+              name: true,
+              slug: true,
+              price: true,
+              status: true,
+              thumbnail: true
+            }
+          }
+        }
+      });
+      
+      // Filtrar apenas produtos ativos para exibição
+      const activeProducts = taggedProducts
+        .filter(relation => relation.product && relation.product.status === 'published')
+        .map(relation => relation.product);
+      
+      // Formatar a cor da tag como estilo CSS
+      const tagStyle = tag.color ? { backgroundColor: tag.color } : undefined;
+      
+      // Adicionar informações extras para exibição
+      const result = {
+        ...tag,
+        productCount: taggedProducts.length,
+        activeProductCount: activeProducts.length,
+        products: activeProducts,
+        tagStyle
+      };
+      
+      return res.status(200).json(result);
+    } catch (error) {
+      return handleError(res, error, 'Erro ao buscar detalhes da tag');
+    }
+  });
+  
+  // Criar uma nova tag de produto
+  app.post(`${apiPrefix}/projects/:projectId/product-tags`, isAuthenticated, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const userId = req.session?.userId || (req.user ? req.user.id : null);
+      
+      if (!userId) {
+        return res.status(401).json({ message: 'Usuário não autenticado' });
+      }
+      
+      // Validar dados da tag
+      const tagData = insertProductTagSchema.parse({
+        ...req.body,
+        projectId,
+        slug: req.body.slug || slugify(req.body.name),
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+      
+      // Verificar se já existe uma tag com o mesmo nome ou slug
+      const existingTag = await db.query.productTags.findFirst({
+        where: and(
+          eq(schema.productTags.projectId, projectId),
+          or(
+            eq(schema.productTags.name, tagData.name),
+            eq(schema.productTags.slug, tagData.slug)
+          )
+        )
+      });
+      
+      if (existingTag) {
+        return res.status(409).json({ 
+          message: `Já existe uma tag com o nome '${tagData.name}' ou slug '${tagData.slug}'` 
+        });
+      }
+      
+      // Criar a tag
+      const newTag = await db.insert(schema.productTags).values(tagData).returning();
+      
+      // Se foram fornecidos IDs de produtos, associar a tag a eles
+      if (req.body.productIds && Array.isArray(req.body.productIds) && req.body.productIds.length > 0) {
+        const relations = req.body.productIds.map(productId => ({
+          tagId: newTag[0].id,
+          productId: parseInt(productId),
+          projectId
+        }));
+        
+        await db.insert(schema.productTagRelations).values(relations);
+      }
+      
+      res.status(201).json({
+        ...newTag[0],
+        message: `Tag '${tagData.name}' criada com sucesso`
+      });
+    } catch (error) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ 
+          message: 'Dados inválidos para a tag', 
+          errors: error.errors 
+        });
+      }
+      return handleError(res, error, 'Erro ao criar tag de produto');
+    }
+  });
+  
+  // Atualizar uma tag
+  app.patch(`${apiPrefix}/projects/:projectId/product-tags/:tagId`, isAuthenticated, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const tagId = parseInt(req.params.tagId);
+      const userId = req.session?.userId || (req.user ? req.user.id : null);
+      
+      if (!userId) {
+        return res.status(401).json({ message: 'Usuário não autenticado' });
+      }
+      
+      // Verificar se a tag existe
+      const tag = await db.query.productTags.findFirst({
+        where: and(
+          eq(schema.productTags.id, tagId),
+          eq(schema.productTags.projectId, projectId)
+        )
+      });
+      
+      if (!tag) {
+        return res.status(404).json({ message: 'Tag não encontrada' });
+      }
+      
+      // Preparar dados para atualização
+      const updateData = {
+        ...req.body,
+        updatedAt: new Date()
+      };
+      
+      // Se o nome foi alterado e o slug não foi fornecido, gerar um novo slug
+      if (updateData.name && updateData.name !== tag.name && !updateData.slug) {
+        updateData.slug = slugify(updateData.name);
+      }
+      
+      // Remover campos que não devem ser atualizados
+      delete updateData.id;
+      delete updateData.projectId;
+      delete updateData.createdAt;
+      delete updateData.productIds;
+      
+      // Se o nome ou slug foi alterado, verificar unicidade
+      if ((updateData.name && updateData.name !== tag.name) || (updateData.slug && updateData.slug !== tag.slug)) {
+        const existingTag = await db.query.productTags.findFirst({
+          where: and(
+            eq(schema.productTags.projectId, projectId),
+            or(
+              updateData.name ? eq(schema.productTags.name, updateData.name) : sql`FALSE`,
+              updateData.slug ? eq(schema.productTags.slug, updateData.slug) : sql`FALSE`
+            ),
+            // Excluir a tag atual da verificação
+            sql`${schema.productTags.id} != ${tagId}`
+          )
+        });
+        
+        if (existingTag) {
+          return res.status(409).json({ 
+            message: `Já existe outra tag com o nome '${updateData.name || tag.name}' ou slug '${updateData.slug || tag.slug}'` 
+          });
+        }
+      }
+      
+      // Atualizar a tag
+      const updatedTag = await db.update(schema.productTags)
+        .set(updateData)
+        .where(and(
+          eq(schema.productTags.id, tagId),
+          eq(schema.productTags.projectId, projectId)
+        ))
+        .returning();
+      
+      res.status(200).json({
+        ...updatedTag[0],
+        message: `Tag atualizada com sucesso`
+      });
+    } catch (error) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ 
+          message: 'Dados inválidos para atualização da tag', 
+          errors: error.errors 
+        });
+      }
+      return handleError(res, error, 'Erro ao atualizar tag');
+    }
+  });
+  
+  // Excluir uma tag
+  app.delete(`${apiPrefix}/projects/:projectId/product-tags/:tagId`, isAuthenticated, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const tagId = parseInt(req.params.tagId);
+      const userId = req.session?.userId || (req.user ? req.user.id : null);
+      
+      if (!userId) {
+        return res.status(401).json({ message: 'Usuário não autenticado' });
+      }
+      
+      // Verificar se a tag existe
+      const tag = await db.query.productTags.findFirst({
+        where: and(
+          eq(schema.productTags.id, tagId),
+          eq(schema.productTags.projectId, projectId)
+        )
+      });
+      
+      if (!tag) {
+        return res.status(404).json({ message: 'Tag não encontrada' });
+      }
+      
+      // Primeiro remover todas as relações desta tag com produtos
+      await db.delete(schema.productTagRelations)
+        .where(and(
+          eq(schema.productTagRelations.tagId, tagId),
+          eq(schema.productTagRelations.projectId, projectId)
+        ));
+      
+      // Excluir a tag
+      await db.delete(schema.productTags)
+        .where(and(
+          eq(schema.productTags.id, tagId),
+          eq(schema.productTags.projectId, projectId)
+        ));
+      
+      res.status(200).json({ 
+        message: `Tag '${tag.name}' excluída com sucesso` 
+      });
+    } catch (error) {
+      return handleError(res, error, 'Erro ao excluir tag');
+    }
+  });
+  
+  // Adicionar produtos a uma tag
+  app.post(`${apiPrefix}/projects/:projectId/product-tags/:tagId/products`, isAuthenticated, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const tagId = parseInt(req.params.tagId);
+      const { productIds } = req.body;
+      const userId = req.session?.userId || (req.user ? req.user.id : null);
+      
+      if (!userId) {
+        return res.status(401).json({ message: 'Usuário não autenticado' });
+      }
+      
+      // Validar dados de entrada
+      if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
+        return res.status(400).json({ message: 'Lista de IDs de produtos é obrigatória' });
+      }
+      
+      // Verificar se a tag existe
+      const tag = await db.query.productTags.findFirst({
+        where: and(
+          eq(schema.productTags.id, tagId),
+          eq(schema.productTags.projectId, projectId)
+        )
+      });
+      
+      if (!tag) {
+        return res.status(404).json({ message: 'Tag não encontrada' });
+      }
+      
+      // Verificar produtos existentes nesta tag para evitar duplicação
+      const existingRelations = await db.query.productTagRelations.findMany({
+        where: and(
+          eq(schema.productTagRelations.tagId, tagId),
+          eq(schema.productTagRelations.projectId, projectId)
+        )
+      });
+      
+      const existingProductIds = existingRelations.map(rel => rel.productId);
+      
+      // Filtrar apenas os novos produtos a adicionar
+      const newProductIds = productIds
+        .map(id => typeof id === 'string' ? parseInt(id) : id)
+        .filter(id => !existingProductIds.includes(id));
+      
+      if (newProductIds.length === 0) {
+        return res.status(200).json({ 
+          message: 'Nenhum produto novo para adicionar à tag', 
+          addedCount: 0 
+        });
+      }
+      
+      // Verificar se todos os produtos pertencem ao projeto
+      const validProducts = await db.query.products.findMany({
+        where: and(
+          inArray(schema.products.id, newProductIds),
+          eq(schema.products.projectId, projectId)
+        ),
+        columns: {
+          id: true
+        }
+      });
+      
+      const validProductIds = validProducts.map(p => p.id);
+      
+      // Criar novos relacionamentos
+      if (validProductIds.length > 0) {
+        const relationData = validProductIds.map(productId => ({
+          tagId,
+          productId,
+          projectId
+        }));
+        
+        await db.insert(schema.productTagRelations).values(relationData);
+      }
+      
+      // Buscar produtos adicionados para incluir na resposta
+      const addedProducts = await db.query.products.findMany({
+        where: and(
+          inArray(schema.products.id, validProductIds),
+          eq(schema.products.projectId, projectId)
+        ),
+        columns: {
+          id: true,
+          name: true,
+          slug: true
+        }
+      });
+      
+      res.status(200).json({
+        message: `${validProductIds.length} produtos adicionados à tag '${tag.name}'`,
+        addedCount: validProductIds.length,
+        addedProducts
+      });
+    } catch (error) {
+      return handleError(res, error, 'Erro ao adicionar produtos à tag');
+    }
+  });
+  
+  // Remover um produto de uma tag
+  app.delete(`${apiPrefix}/projects/:projectId/product-tags/:tagId/products/:productId`, isAuthenticated, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const tagId = parseInt(req.params.tagId);
+      const productId = parseInt(req.params.productId);
+      const userId = req.session?.userId || (req.user ? req.user.id : null);
+      
+      if (!userId) {
+        return res.status(401).json({ message: 'Usuário não autenticado' });
+      }
+      
+      // Verificar se a tag existe
+      const tag = await db.query.productTags.findFirst({
+        where: and(
+          eq(schema.productTags.id, tagId),
+          eq(schema.productTags.projectId, projectId)
+        )
+      });
+      
+      if (!tag) {
+        return res.status(404).json({ message: 'Tag não encontrada' });
+      }
+      
+      // Verificar se o produto existe
+      const product = await db.query.products.findFirst({
+        where: and(
+          eq(schema.products.id, productId),
+          eq(schema.products.projectId, projectId)
+        ),
+        columns: {
+          id: true,
+          name: true
+        }
+      });
+      
+      if (!product) {
+        return res.status(404).json({ message: 'Produto não encontrado' });
+      }
+      
+      // Remover a relação
+      const deletedCount = await db.delete(schema.productTagRelations)
+        .where(and(
+          eq(schema.productTagRelations.tagId, tagId),
+          eq(schema.productTagRelations.productId, productId),
+          eq(schema.productTagRelations.projectId, projectId)
+        ))
+        .returning();
+      
+      // Verificar se a relação existia
+      if (deletedCount.length === 0) {
+        return res.status(404).json({ 
+          message: `O produto não estava associado a esta tag` 
+        });
+      }
+      
+      res.status(200).json({ 
+        message: `Produto '${product.name}' removido da tag '${tag.name}'` 
+      });
+    } catch (error) {
+      return handleError(res, error, 'Erro ao remover produto da tag');
+    }
+  });
+  
+  // Obter produtos por tag
+  app.get(`${apiPrefix}/projects/:projectId/products/by-tag/:tagSlug`, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const { tagSlug } = req.params;
+      const { page = '1', limit = '20', sort = 'name_asc' } = req.query;
+      
+      // Buscar a tag pelo slug
+      const tag = await db.query.productTags.findFirst({
+        where: and(
+          eq(schema.productTags.slug, tagSlug),
+          eq(schema.productTags.projectId, projectId)
+        )
+      });
+      
+      if (!tag) {
+        return res.status(404).json({ message: 'Tag não encontrada' });
+      }
+      
+      // Converter parâmetros para números
+      const pageNum = parseInt(page as string);
+      const limitNum = parseInt(limit as string);
+      const offset = (pageNum - 1) * limitNum;
+      
+      // Buscar ids dos produtos relacionados a esta tag
+      const relations = await db.query.productTagRelations.findMany({
+        where: and(
+          eq(schema.productTagRelations.tagId, tag.id),
+          eq(schema.productTagRelations.projectId, projectId)
+        )
+      });
+      
+      const productIds = relations.map(rel => rel.productId);
+      
+      if (productIds.length === 0) {
+        return res.status(200).json({
+          products: [],
+          pagination: {
+            total: 0,
+            page: pageNum,
+            limit: limitNum,
+            pages: 0
+          },
+          tag
+        });
+      }
+      
+      // Definir ordem baseada no parâmetro sort
+      let orderBy;
+      switch (sort) {
+        case 'name_asc':
+          orderBy = [asc(schema.products.name)];
+          break;
+        case 'name_desc':
+          orderBy = [desc(schema.products.name)];
+          break;
+        case 'price_asc':
+          orderBy = [asc(schema.products.price)];
+          break;
+        case 'price_desc':
+          orderBy = [desc(schema.products.price)];
+          break;
+        case 'newest':
+          orderBy = [desc(schema.products.createdAt)];
+          break;
+        case 'oldest':
+          orderBy = [asc(schema.products.createdAt)];
+          break;
+        default:
+          orderBy = [asc(schema.products.name)];
+      }
+      
+      // Contar total de produtos válidos
+      const totalCount = await db.select({ count: count() })
+        .from(schema.products)
+        .where(and(
+          inArray(schema.products.id, productIds),
+          eq(schema.products.projectId, projectId),
+          eq(schema.products.status, 'published')
+        ));
+      
+      const total = parseInt(totalCount[0]?.count?.toString() || '0');
+      
+      // Buscar produtos paginados
+      const products = await db.query.products.findMany({
+        where: and(
+          inArray(schema.products.id, productIds),
+          eq(schema.products.projectId, projectId),
+          eq(schema.products.status, 'published')
+        ),
+        limit: limitNum,
+        offset,
+        orderBy,
+        with: {
+          category: true,
+          variants: {
+            limit: 5
+          }
+        }
+      });
+      
+      // Preparar resultado formatado
+      const result = {
+        products,
+        pagination: {
+          total,
+          page: pageNum,
+          limit: limitNum,
+          pages: Math.ceil(total / limitNum)
+        },
+        tag
+      };
+      
+      return res.status(200).json(result);
+    } catch (error) {
+      return handleError(res, error, 'Erro ao buscar produtos por tag');
+    }
+  });
+
   app.get(`${apiPrefix}/products/:id`, async (req, res) => {
     try {
       const productId = parseInt(req.params.id);
