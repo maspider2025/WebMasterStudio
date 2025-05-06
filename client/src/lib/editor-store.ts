@@ -80,6 +80,14 @@ export interface Element {
     css?: string;
     js?: string;
   };
+  dataConnection?: {
+    configured: boolean;
+    dataSource?: string;
+    operation?: string;
+    fields?: string[];
+    filters?: Array<{field: string; operator: string; value: string}>;
+    customQuery?: string;
+  };
   seo?: {
     title?: string;
     description?: string;
