@@ -64,9 +64,9 @@ export function DatabaseVisualizer({ projectId = 'default' }: DatabaseVisualizer
     setIsLoading(true);
     try {
       // Usa o helper resolveProjectId para obter o ID do projeto de forma mais robusta
-      const currentProjectId = resolveProjectId(projectId);
+      const resolvedId = resolveProjectId(projectId);
       
-      if (!currentProjectId) {
+      if (!resolvedId) {
         toast({
           title: "Projeto não identificado",
           description: "Não foi possível identificar o ID do projeto atual. Tente salvar o projeto primeiro.",
@@ -75,6 +75,10 @@ export function DatabaseVisualizer({ projectId = 'default' }: DatabaseVisualizer
         setIsLoading(false);
         return;
       }
+      
+      // TypeScript não sabe que já validamos a existência do ID acima, então 
+      // vamos garantir aqui que temos uma string válida
+      const currentProjectId: string = resolvedId;
       
       const response = await apiRequest('GET', `/api/database/tables?projectId=${currentProjectId}`);
       const data = await response.json();
@@ -113,9 +117,9 @@ export function DatabaseVisualizer({ projectId = 'default' }: DatabaseVisualizer
     
     try {
       // Usa o helper resolveProjectId para obter o ID do projeto de forma mais robusta
-      const currentProjectId = resolveProjectId(projectId);
+      const resolvedId = resolveProjectId(projectId);
       
-      if (!currentProjectId) {
+      if (!resolvedId) {
         toast({
           title: "Projeto não identificado",
           description: "Não foi possível identificar o ID do projeto atual. Tente salvar o projeto primeiro.",
@@ -124,6 +128,10 @@ export function DatabaseVisualizer({ projectId = 'default' }: DatabaseVisualizer
         setIsTableDataLoading(false);
         return;
       }
+      
+      // TypeScript não sabe que já validamos a existência do ID acima, então 
+      // vamos garantir aqui que temos uma string válida
+      const currentProjectId: string = resolvedId;
       
       // Buscar schema da tabela para as informações estruturais
       const schemaResponse = await apiRequest('GET', `/api/database/tables/${tableName}/schema?projectId=${currentProjectId}`);
