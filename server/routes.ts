@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertUserSchema, insertProjectSchema, insertPageSchema, insertElementSchema, insertProductSchema, insertProductCategorySchema, insertProductVariantSchema, insertCartSchema, insertCartItemSchema } from "@shared/schema";
+import { isAuthenticated } from "./auth";
 import { eq, and, desc, like, or, sql } from "drizzle-orm";
 import { db } from "@db";
 import * as schema from "@shared/schema";
@@ -314,36 +315,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Project routes
   app.get(`${apiPrefix}/projects`, async (req, res) => {
     try {
-      const userId = req.session.userId;
+      // Verificar autenticação via session ou pelo middleware auth
+      const userId = req.session?.userId || (req.user ? req.user.id : null);
+      
       if (!userId) {
-        return res.status(401).json({ message: 'Unauthorized' });
+        return res.status(401).json({ message: 'Não autenticado. Faça login para continuar.' });
       }
       
+      console.log(`Buscando projetos para o usuário ID: ${userId}`);
       const projects = await storage.getProjectsByUserId(userId);
-      res.status(200).json(projects);
+      
+      console.log(`Projetos encontrados: ${projects.length}`);
+      return res.status(200).json(projects);
     } catch (error) {
-      console.error('Error fetching projects:', error);
-      res.status(500).json({ message: 'Failed to fetch projects' });
+      console.error('Erro ao buscar projetos:', error);
+      return res.status(500).json({ message: 'Falha ao buscar projetos: ' + (error instanceof Error ? error.message : 'Erro desconhecido') });
     }
   });
 
   app.post(`${apiPrefix}/projects`, async (req, res) => {
     try {
-      const userId = req.session.userId;
+      // Verificar autenticação via session ou pelo middleware auth
+      const userId = req.session?.userId || (req.user ? req.user.id : null);
+      
       if (!userId) {
-        return res.status(401).json({ message: 'Unauthorized' });
+        return res.status(401).json({ message: 'Não autenticado. Faça login para continuar.' });
       }
       
+      console.log(`Criando novo projeto para o usuário ID: ${userId}. Dados recebidos:`, req.body);
+      
+      // Configuração padrão para novo projeto
       const projectData = insertProjectSchema.parse({
-        ...req.body,
-        userId,
+        name: req.body.name || 'Novo Projeto',
+        description: req.body.description || 'Projeto criado no NextGen Site Builder',
+        isPublic: req.body.isPublic !== undefined ? req.body.isPublic : false,
+        thumbnail: req.body.thumbnail || null,
+        userId: userId,
       });
       
       const newProject = await storage.createProject(projectData);
-      res.status(201).json(newProject);
+      console.log(`Projeto criado com sucesso: ${newProject.id}`);
+      
+      // Se for um projeto vazio (sem template), criar pelo menos uma página home
+      if (!req.body.fromTemplate) {
+        const homePage = await storage.createPage({
+          projectId: newProject.id,
+          name: 'Home',
+          slug: 'home',
+          isHomepage: true,
+        });
+        console.log(`Página home criada: ${homePage.id}`);
+      }
+      
+      return res.status(201).json(newProject);
     } catch (error) {
-      console.error('Error creating project:', error);
-      res.status(500).json({ message: 'Failed to create project' });
+      console.error('Erro ao criar projeto:', error);
+      return res.status(500).json({ 
+        message: 'Falha ao criar projeto: ' + (error instanceof Error ? error.message : 'Erro desconhecido')
+      });
     }
   });
 
