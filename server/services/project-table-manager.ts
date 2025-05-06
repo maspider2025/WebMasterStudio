@@ -768,29 +768,66 @@ export class ProjectTableManager {
         whereConditions.push(sql`"deleted_at" IS NULL`);
       }
       
+      // Verificar campos numéricos armazenados como texto
+      const numericFieldsMap = new Map<string, boolean>();
+      
+      // Obter informações de colunas para filtros numéricos em campos VARCHAR
+      const columnsInfo = await db.execute(sql`
+        SELECT column_name, data_type 
+        FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+          AND table_name = ${fullTableName} 
+      `);
+      
+      // Mapear quais campos são numéricos armazenados como texto
+      for (const col of columnsInfo.rows) {
+        const dataType = col.data_type.toLowerCase();
+        const columnName = col.column_name;
+        
+        // Se for VARCHAR mas potencialmente contém valores numéricos e tem nome sugestivo (preço, valor, etc)
+        if (['character varying', 'varchar', 'text'].includes(dataType) && 
+            (columnName === 'preco' || columnName.includes('price') || 
+             columnName === 'valor' || columnName.includes('value'))) {
+          numericFieldsMap.set(columnName, true);
+        }
+      }
+
       // Aplicar filtros
       for (const filter of filters) {
         const { field, operator, value } = filter;
         let condition: SQL;
+        const isNumericField = numericFieldsMap.has(field);
         
         switch (operator) {
           case 'eq':
-            condition = sql`${sql.identifier(field)} = ${value}`;
+            condition = isNumericField 
+              ? sql`CAST(${sql.identifier(field)} AS NUMERIC) = ${value}` 
+              : sql`${sql.identifier(field)} = ${value}`;
             break;
           case 'neq':
-            condition = sql`${sql.identifier(field)} <> ${value}`;
+            condition = isNumericField 
+              ? sql`CAST(${sql.identifier(field)} AS NUMERIC) <> ${value}` 
+              : sql`${sql.identifier(field)} <> ${value}`;
             break;
           case 'gt':
-            condition = sql`${sql.identifier(field)} > ${value}`;
+            condition = isNumericField 
+              ? sql`CAST(${sql.identifier(field)} AS NUMERIC) > ${value}` 
+              : sql`${sql.identifier(field)} > ${value}`;
             break;
           case 'gte':
-            condition = sql`${sql.identifier(field)} >= ${value}`;
+            condition = isNumericField 
+              ? sql`CAST(${sql.identifier(field)} AS NUMERIC) >= ${value}` 
+              : sql`${sql.identifier(field)} >= ${value}`;
             break;
           case 'lt':
-            condition = sql`${sql.identifier(field)} < ${value}`;
+            condition = isNumericField 
+              ? sql`CAST(${sql.identifier(field)} AS NUMERIC) < ${value}` 
+              : sql`${sql.identifier(field)} < ${value}`;
             break;
           case 'lte':
-            condition = sql`${sql.identifier(field)} <= ${value}`;
+            condition = isNumericField 
+              ? sql`CAST(${sql.identifier(field)} AS NUMERIC) <= ${value}` 
+              : sql`${sql.identifier(field)} <= ${value}`;
             break;
           case 'like':
             condition = sql`${sql.identifier(field)} LIKE ${`%${value}%`}`;
@@ -832,7 +869,36 @@ export class ProjectTableManager {
       // Aplicar ordenação
       if (pagination.orderBy) {
         const direction = pagination.orderDirection === 'desc' ? sql` DESC` : sql``;
-        baseQuery = sql`${baseQuery} ORDER BY ${sql.identifier(pagination.orderBy)}${direction}`;
+        
+        // Verificar se o campo de ordenação é um campo numérico armazenado como string
+        // Especialmente útil para campos como 'preco' que podem ser VARCHAR mas conter números
+        let isNumericField = false;
+        
+        // Verificar tipo de coluna diretamente do schema
+        const columnInfo = await db.execute(sql`
+          SELECT data_type 
+          FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+            AND table_name = ${fullTableName} 
+            AND column_name = ${pagination.orderBy}
+        `);
+        
+        if (columnInfo.rows.length > 0) {
+          const dataType = columnInfo.rows[0].data_type.toLowerCase();
+          // Se for VARCHAR mas potencialmente contém valores numéricos
+          if (['character varying', 'varchar', 'text'].includes(dataType) && 
+              (pagination.orderBy === 'preco' || pagination.orderBy.includes('price'))) {
+            isNumericField = true;
+          }
+        }
+        
+        if (isNumericField) {
+          // Usar CAST para ordenar numericamente quando o campo é string mas contém números
+          baseQuery = sql`${baseQuery} ORDER BY CAST(${sql.identifier(pagination.orderBy)} AS NUMERIC)${direction}`;
+        } else {
+          // Ordenação padrão para outros campos
+          baseQuery = sql`${baseQuery} ORDER BY ${sql.identifier(pagination.orderBy)}${direction}`;
+        }
       } else {
         // Ordená-los por ID ou created_at por padrão
         const hasCreatedAt = await db.execute<{ exists: boolean }>(sql`
