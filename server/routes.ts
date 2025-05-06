@@ -4540,11 +4540,14 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
         return res.status(400).json({ message: "É necessário fornecer o ID do projeto" });
       }
       
+      // Construir o nome real da tabela com o prefixo do projeto
+      const fullTableName = `p${projectId}_${tableName}`;
+      
       // Verificar se a tabela pertence ao projeto
       const projectTable = await db.query.projectDatabases.findFirst({
         where: and(
           eq(schema.projectDatabases.projectId, projectId),
-          eq(schema.projectDatabases.tableName, tableName)
+          eq(schema.projectDatabases.tableName, fullTableName)
         )
       });
       
@@ -4562,7 +4565,7 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
           character_maximum_length
         FROM information_schema.columns 
         WHERE table_schema = 'public' 
-        AND table_name = ${tableName}
+        AND table_name = ${fullTableName}
         ORDER BY ordinal_position;
       `;
       
@@ -4579,7 +4582,7 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
         JOIN information_schema.constraint_column_usage AS ccu USING (constraint_schema, constraint_name)
         JOIN information_schema.columns AS c ON c.table_schema = tc.constraint_schema
           AND tc.table_name = c.table_name AND ccu.column_name = c.column_name
-        WHERE tc.constraint_type = 'PRIMARY KEY' AND tc.table_name = ${tableName};
+        WHERE tc.constraint_type = 'PRIMARY KEY' AND tc.table_name = ${fullTableName};
       `;
       
       const primaryKeyResult = await db.execute(primaryKeyQuery);
@@ -4587,6 +4590,7 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
       
       res.json({
         tableName,
+        fullTableName,
         columns: result.rows,
         primaryKeys
       });
@@ -4612,11 +4616,14 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
         return res.status(400).json({ message: "É necessário fornecer o ID do projeto" });
       }
       
+      // Construir o nome real da tabela com o prefixo do projeto
+      const fullTableName = `p${projectId}_${tableName}`;
+      
       // Verificar se a tabela pertence ao projeto
       const projectTable = await db.query.projectDatabases.findFirst({
         where: and(
           eq(schema.projectDatabases.projectId, projectId),
-          eq(schema.projectDatabases.tableName, tableName)
+          eq(schema.projectDatabases.tableName, fullTableName)
         )
       });
       
@@ -4636,7 +4643,7 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
       });
       
       // Construir a consulta base
-      let queryText = `SELECT * FROM "${tableName}" WHERE 1=1`;
+      let queryText = `SELECT * FROM "${fullTableName}" WHERE 1=1`;
       const queryParams: any[] = [];
       
       // Adicionar filtros à consulta
@@ -4677,7 +4684,7 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
       const result = await db.execute(query);
       
       // Contar o total de registros (para paginação)
-      let countQueryText = `SELECT COUNT(*) as total FROM "${tableName}" WHERE 1=1`;
+      let countQueryText = `SELECT COUNT(*) as total FROM "${fullTableName}" WHERE 1=1`;
       
       // Adicionar os mesmos filtros à consulta de contagem
       filters.forEach((filter, i) => {
