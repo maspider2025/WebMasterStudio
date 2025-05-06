@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Database, RefreshCw, Eye, Code, Table2, Server } from 'lucide-react';
 import { apiRequest } from "@/lib/queryClient";
+import { resolveProjectId } from "@/lib/project-id-helper";
 import NewDatabaseTable from './NewDatabaseTable';
 
 interface DatabaseVisualizerProps {
@@ -62,15 +63,40 @@ export function DatabaseVisualizer({ projectId = 'default' }: DatabaseVisualizer
   const loadTables = async () => {
     setIsLoading(true);
     try {
-      // Obtém o ID do projeto baseado nas props ou do URL
-      const currentProjectId = projectId === 'default'
-        ? new URLSearchParams(window.location.search).get('id') || null
-        : projectId;
+      // Obtém o ID do projeto baseado nas props ou do URL com sistema mais robusto
+      let currentProjectId = projectId;
+      
+      // Se o projectId é 'default', precisamos extrair da URL
+      if (currentProjectId === 'default') {
+        // Primeiro tenta extrair da querystring ?id=X
+        const urlParams = new URLSearchParams(window.location.search);
+        currentProjectId = urlParams.get('id');
+        
+        // Se não encontrou, tenta extrair da URL completa no formato /editor/new-true&name=NOME&id=X
+        if (!currentProjectId) {
+          const pathMatch = window.location.pathname.match(/\/editor\/([^\/]+)/);
+          if (pathMatch && pathMatch[1]) {
+            // Extrair apenas o ID de dentro da string do path
+            const idMatch = pathMatch[1].match(/id=(\d+)/);
+            if (idMatch && idMatch[1]) {
+              currentProjectId = idMatch[1];
+            }
+          }
+          
+          // Se ainda não encontrou, tenta extrair da URL completa no formato URL/editor?new=true&name=NOME&id=X
+          if (!currentProjectId) {
+            const fullUrlMatch = window.location.href.match(/id=(\d+)/);
+            if (fullUrlMatch && fullUrlMatch[1]) {
+              currentProjectId = fullUrlMatch[1];
+            }
+          }
+        }
+      }
       
       if (!currentProjectId) {
         toast({
           title: "Projeto não identificado",
-          description: "Não foi possível identificar o ID do projeto atual.",
+          description: "Não foi possível identificar o ID do projeto atual. Tente salvar o projeto primeiro.",
           variant: "destructive"
         });
         setIsLoading(false);
@@ -113,15 +139,40 @@ export function DatabaseVisualizer({ projectId = 'default' }: DatabaseVisualizer
     setTableData(null);
     
     try {
-      // Obtém o ID do projeto baseado nas props ou do URL
-      const currentProjectId = projectId === 'default'
-        ? new URLSearchParams(window.location.search).get('id') || null
-        : projectId;
+      // Obtém o ID do projeto baseado nas props ou do URL com sistema mais robusto
+      let currentProjectId = projectId;
+      
+      // Se o projectId é 'default', precisamos extrair da URL
+      if (currentProjectId === 'default') {
+        // Primeiro tenta extrair da querystring ?id=X
+        const urlParams = new URLSearchParams(window.location.search);
+        currentProjectId = urlParams.get('id');
+        
+        // Se não encontrou, tenta extrair da URL completa no formato /editor/new-true&name=NOME&id=X
+        if (!currentProjectId) {
+          const pathMatch = window.location.pathname.match(/\/editor\/([^\/]+)/);
+          if (pathMatch && pathMatch[1]) {
+            // Extrair apenas o ID de dentro da string do path
+            const idMatch = pathMatch[1].match(/id=(\d+)/);
+            if (idMatch && idMatch[1]) {
+              currentProjectId = idMatch[1];
+            }
+          }
+          
+          // Se ainda não encontrou, tenta extrair da URL completa no formato URL/editor?new=true&name=NOME&id=X
+          if (!currentProjectId) {
+            const fullUrlMatch = window.location.href.match(/id=(\d+)/);
+            if (fullUrlMatch && fullUrlMatch[1]) {
+              currentProjectId = fullUrlMatch[1];
+            }
+          }
+        }
+      }
       
       if (!currentProjectId) {
         toast({
           title: "Projeto não identificado",
-          description: "Não foi possível identificar o ID do projeto atual.",
+          description: "Não foi possível identificar o ID do projeto atual. Tente salvar o projeto primeiro.",
           variant: "destructive"
         });
         setIsTableDataLoading(false);
