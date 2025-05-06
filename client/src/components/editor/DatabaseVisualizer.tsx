@@ -63,35 +63,8 @@ export function DatabaseVisualizer({ projectId = 'default' }: DatabaseVisualizer
   const loadTables = async () => {
     setIsLoading(true);
     try {
-      // Obtém o ID do projeto baseado nas props ou do URL com sistema mais robusto
-      let currentProjectId = projectId;
-      
-      // Se o projectId é 'default', precisamos extrair da URL
-      if (currentProjectId === 'default') {
-        // Primeiro tenta extrair da querystring ?id=X
-        const urlParams = new URLSearchParams(window.location.search);
-        currentProjectId = urlParams.get('id');
-        
-        // Se não encontrou, tenta extrair da URL completa no formato /editor/new-true&name=NOME&id=X
-        if (!currentProjectId) {
-          const pathMatch = window.location.pathname.match(/\/editor\/([^\/]+)/);
-          if (pathMatch && pathMatch[1]) {
-            // Extrair apenas o ID de dentro da string do path
-            const idMatch = pathMatch[1].match(/id=(\d+)/);
-            if (idMatch && idMatch[1]) {
-              currentProjectId = idMatch[1];
-            }
-          }
-          
-          // Se ainda não encontrou, tenta extrair da URL completa no formato URL/editor?new=true&name=NOME&id=X
-          if (!currentProjectId) {
-            const fullUrlMatch = window.location.href.match(/id=(\d+)/);
-            if (fullUrlMatch && fullUrlMatch[1]) {
-              currentProjectId = fullUrlMatch[1];
-            }
-          }
-        }
-      }
+      // Usa o helper resolveProjectId para obter o ID do projeto de forma mais robusta
+      const currentProjectId = resolveProjectId(projectId);
       
       if (!currentProjectId) {
         toast({
@@ -139,35 +112,8 @@ export function DatabaseVisualizer({ projectId = 'default' }: DatabaseVisualizer
     setTableData(null);
     
     try {
-      // Obtém o ID do projeto baseado nas props ou do URL com sistema mais robusto
-      let currentProjectId = projectId;
-      
-      // Se o projectId é 'default', precisamos extrair da URL
-      if (currentProjectId === 'default') {
-        // Primeiro tenta extrair da querystring ?id=X
-        const urlParams = new URLSearchParams(window.location.search);
-        currentProjectId = urlParams.get('id');
-        
-        // Se não encontrou, tenta extrair da URL completa no formato /editor/new-true&name=NOME&id=X
-        if (!currentProjectId) {
-          const pathMatch = window.location.pathname.match(/\/editor\/([^\/]+)/);
-          if (pathMatch && pathMatch[1]) {
-            // Extrair apenas o ID de dentro da string do path
-            const idMatch = pathMatch[1].match(/id=(\d+)/);
-            if (idMatch && idMatch[1]) {
-              currentProjectId = idMatch[1];
-            }
-          }
-          
-          // Se ainda não encontrou, tenta extrair da URL completa no formato URL/editor?new=true&name=NOME&id=X
-          if (!currentProjectId) {
-            const fullUrlMatch = window.location.href.match(/id=(\d+)/);
-            if (fullUrlMatch && fullUrlMatch[1]) {
-              currentProjectId = fullUrlMatch[1];
-            }
-          }
-        }
-      }
+      // Usa o helper resolveProjectId para obter o ID do projeto de forma mais robusta
+      const currentProjectId = resolveProjectId(projectId);
       
       if (!currentProjectId) {
         toast({
