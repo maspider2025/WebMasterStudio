@@ -118,8 +118,9 @@ const ResizableElement = ({ element, isSelected, onClick }: ResizableElementProp
       case ElementTypes.image:
         return <img src={element.src || 'https://via.placeholder.com/150'} alt={element.alt || 'Image'} className="w-full h-full object-cover" />;
       case ElementTypes.form:
-        // Usar o novo componente FormComponent para renderizar formulários
-        return <FormComponent element={element} isEditMode={false} />;
+        // Usar o componente FormComponent para renderizar formulários
+        // Importante: isEditMode=true para garantir que os campos sejam independentes e editáveis
+        return <FormComponent element={element} isEditMode={true} />;
       case ElementTypes.input:
         // Usar o novo componente FormTextField para renderizar inputs
         return <FormTextField element={element} isEditMode={false} />;

@@ -1139,48 +1139,77 @@ export const FormComponent = ({ element, isEditMode, onChange }: FormFieldProps)
 /**
  * Função auxiliar para renderizar o componente de formulário apropriado
  */
+// Esta função renderiza um elemento de formulário individual, garantindo que cada campo seja totalmente independente
+// com seu próprio ID único e capacidade de ser editado separadamente
 export const renderFormElement = (element: Element, isEditMode: boolean, parentId?: string) => {
+  // Sempre garantir que o elemento tenha um ID único próprio
+  const elementId = element.id || `elem_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  
   // Se estamos no modo de edição e temos um parentId, usar o componente arrastável
   if (isEditMode && parentId) {
     return (
       <DraggableFormField
-        key={element.id}
-        element={element}
+        key={elementId}
+        element={{
+          ...element,
+          id: elementId,
+          // Garantir que o elemento tenha um atributo HTML id único para acessibilidade
+          htmlAttributes: {
+            ...element.htmlAttributes,
+            id: element.htmlAttributes?.id || `field_${elementId}`,
+            name: element.htmlAttributes?.name || `field_${elementId.replace(/\W/g, '')}`
+          }
+        }}
         isEditMode={isEditMode}
         parentId={parentId}
         onDelete={() => {
           // Esta função será tratada pelo componente pai (FormComponent)
-          const event = new CustomEvent('field:delete', { detail: { id: element.id } });
+          const event = new CustomEvent('field:delete', { detail: { id: elementId } });
           document.dispatchEvent(event);
         }}
         onDuplicate={() => {
           // Esta função será tratada pelo componente pai (FormComponent)
-          const event = new CustomEvent('field:duplicate', { detail: { element } });
+          const event = new CustomEvent('field:duplicate', { detail: { element: {
+            ...element,
+            id: elementId
+          } } });
           document.dispatchEvent(event);
         }}
         onEdit={() => {
           // Esta função será tratada pelo componente pai (FormComponent)
-          const event = new CustomEvent('field:edit', { detail: { id: element.id } });
+          const event = new CustomEvent('field:edit', { detail: { id: elementId } });
           document.dispatchEvent(event);
         }}
       />
     );
   }
   
+  // Garantir que mesmo no modo de visualização, cada campo tenha seu ID único
+  const enhancedElement = {
+    ...element,
+    id: elementId,
+    htmlAttributes: {
+      ...element.htmlAttributes,
+      id: element.htmlAttributes?.id || `field_${elementId}`,
+      name: element.htmlAttributes?.name || `field_${elementId.replace(/\W/g, '')}`
+    }
+  };
+  
   // Caso contrário, usar o componente normal
   switch (element.type) {
     case ElementTypes.input:
-      return <FormTextField key={element.id} element={element} isEditMode={isEditMode} />;
+      return <FormTextField key={elementId} element={enhancedElement} isEditMode={isEditMode} />;
     case ElementTypes.select:
-      return <FormSelectField key={element.id} element={element} isEditMode={isEditMode} />;
+      return <FormSelectField key={elementId} element={enhancedElement} isEditMode={isEditMode} />;
     case ElementTypes.checkbox:
-      return <FormCheckboxField key={element.id} element={element} isEditMode={isEditMode} />;
+      return <FormCheckboxField key={elementId} element={enhancedElement} isEditMode={isEditMode} />;
     case ElementTypes.textarea:
-      return <FormTextareaField key={element.id} element={element} isEditMode={isEditMode} />;
+      return <FormTextareaField key={elementId} element={enhancedElement} isEditMode={isEditMode} />;
     case ElementTypes.form:
-      return <FormComponent key={element.id} element={element} isEditMode={isEditMode} />;
+      // Um formulário dentro de um formulário - raramente usado, mas suportado
+      return <FormComponent key={elementId} element={enhancedElement} isEditMode={isEditMode} />;
     case ElementTypes.button:
-      return <FormSubmitButton key={element.id} element={element} isEditMode={isEditMode} />;
+      return <FormSubmitButton key={elementId} element={enhancedElement} isEditMode={isEditMode} />;
     default:
       return null;
   }
