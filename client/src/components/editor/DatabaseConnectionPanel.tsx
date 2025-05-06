@@ -14,7 +14,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { Database, Save, Plus, Trash2, Filter, ArrowDown, ArrowRight, Zap, RotateCw, ArrowUpDown } from 'lucide-react';
 import { getAvailableTables, getTableFields } from '@/lib/database-element-integration';
-import { Element } from '@/shared/schema';
+import type { Element, DatabaseConnection } from '@/lib/element-types';
 
 interface DatabaseConnectionPanelProps {
   element: Element;

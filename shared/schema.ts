@@ -575,7 +575,8 @@ export type InsertPage = z.infer<typeof insertPageSchema>;
 export type Page = typeof pages.$inferSelect;
 
 export type InsertElement = z.infer<typeof insertElementSchema>;
-export type Element = typeof elements.$inferSelect;
+
+// Estendemos o tipo Element com propriedades adicionais para o editor
 
 export type InsertTemplate = z.infer<typeof insertTemplateSchema>;
 export type Template = typeof templates.$inferSelect;
@@ -636,7 +637,7 @@ export interface DatabaseConnection {
   elementId?: number;
 }
 
-export interface Element extends typeof elements.$inferSelect {
+export type Element = typeof elements.$inferSelect & {
   dataConnection?: DatabaseConnection;
   props?: any;
   children?: Element[];
