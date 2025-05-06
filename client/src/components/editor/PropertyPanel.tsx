@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useEditorStore } from "@/lib/editor-store";
+import { ElementTypes } from "@/lib/element-types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
