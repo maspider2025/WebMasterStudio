@@ -268,204 +268,25 @@ interface EditorState {
   resizeElementLibrary: (width: number) => void;
 }
 
-// Helper to create a deep copy of elements array
-const cloneElements = (elements: Element[]): Element[] => {
-  return JSON.parse(JSON.stringify(elements));
-};
-
-// Helper to generate unique IDs
-const generateId = (prefix: string): string => {
+// Função auxiliar para gerar IDs únicos
+function generateId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-};
+}
 
-// Helper for adding multiple elements at once
-const addMultipleElements = (elements: Element[], newElements: Element[]): Element[] => {
-  return [...elements, ...newElements];
-};
+// Função auxiliar para clonar elementos profundamente
+function cloneElements(elements: Element[]): Element[] {
+  return JSON.parse(JSON.stringify(elements));
+}
 
-// Helper for updating element properties
-const updateElementById = (elements: Element[], id: string, updates: Partial<Element>): Element[] => {
-  return elements.map((el) => {
-    if (el.id === id) {
-      return { ...el, ...updates };
-    }
-    return el;
-  });
-};
-
-// Helper for grid snapping
-const snapToGrid = (value: number, gridSize: number): number => {
+// Função auxiliar para snapToGrid
+function snapToGrid(value: number, gridSize: number): number {
   return Math.round(value / gridSize) * gridSize;
-};
-
-// HTML template generator
-const generateHtml = (elements: Element[], includeStyles: boolean = true): string => {
-  let html = '<!DOCTYPE html>\n<html lang="pt-BR">\n<head>\n';
-  html += '  <meta charset="UTF-8">\n';
-  html += '  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n';
-  html += '  <title>Site exportado - NextGen Site Builder</title>\n';
-  
-  if (includeStyles) {
-    html += '  <style>\n';
-    html += '    body { margin: 0; padding: 0; font-family: Arial, sans-serif; }\n';
-    html += '    .element { position: absolute; }\n';
-    // Add more global styles
-    html += '  </style>\n';
-  }
-  
-  html += '</head>\n<body>\n';
-  html += '  <div class="page-container" style="position: relative; width: 100%; height: 100vh; overflow: hidden;">\n';
-  
-  // Sort elements by zIndex
-  const sortedElements = [...elements].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
-  
-  // Add each element
-  sortedElements.forEach(element => {
-    if (element.visible === false) return;
-    
-    const styleAttr = element.styles ? 
-      `style="position: absolute; left: ${element.x}px; top: ${element.y}px; width: ${element.width}px; height: ${element.height}px; ${Object.entries(element.styles).map(([key, value]) => `${key}: ${value};`).join(' ')}"` : 
-      `style="position: absolute; left: ${element.x}px; top: ${element.y}px; width: ${element.width}px; height: ${element.height}px;"`;
-    
-    const classAttr = element.cssClasses?.length ? ` class="${element.cssClasses.join(' ')}"` : '';
-    const customAttrs = element.htmlAttributes ? 
-      Object.entries(element.htmlAttributes).map(([key, value]) => ` ${key}="${value}"`).join('') : '';
-    
-    switch (element.type) {
-      case 'text':
-        html += `  <div id="${element.id}"${classAttr} ${styleAttr}${customAttrs}>${element.content || ''}</div>\n`;
-        break;
-      case 'heading':
-        html += `  <h2 id="${element.id}"${classAttr} ${styleAttr}${customAttrs}>${element.content || ''}</h2>\n`;
-        break;
-      case 'paragraph':
-        html += `  <p id="${element.id}"${classAttr} ${styleAttr}${customAttrs}>${element.content || ''}</p>\n`;
-        break;
-      case 'button':
-        html += `  <button id="${element.id}"${classAttr} ${styleAttr}${customAttrs}>${element.content || ''}</button>\n`;
-        break;
-      case 'image':
-        html += `  <img id="${element.id}"${classAttr} ${styleAttr} src="${element.src || ''}" alt="${element.alt || ''}"${customAttrs} />\n`;
-        break;
-      case 'container':
-        html += `  <div id="${element.id}"${classAttr} ${styleAttr}${customAttrs}></div>\n`;
-        break;
-      case 'custom':
-        if (element.customCode?.html) {
-          html += `  ${element.customCode.html}\n`;
-        } else {
-          html += `  <div id="${element.id}"${classAttr} ${styleAttr}${customAttrs}>${element.content || ''}</div>\n`;
-        }
-        break;
-      default:
-        html += `  <div id="${element.id}"${classAttr} ${styleAttr}${customAttrs}>${element.content || ''}</div>\n`;
-    }
-  });
-  
-  html += '  </div>\n';
-  
-  // Add custom scripts
-  html += '  <script>\n';
-  html += '    // Generated JavaScript\n';
-  
-  // Add animation handlers
-  const elementsWithAnimations = elements.filter(el => el.animations && el.animations.length > 0);
-  if (elementsWithAnimations.length > 0) {
-    html += '    document.addEventListener(\'DOMContentLoaded\', function() {\n';
-    elementsWithAnimations.forEach(element => {
-      element.animations?.forEach((animation, index) => {
-        html += `      // Animation for ${element.id} - ${animation.type}\n`;
-        html += `      const element${element.id.replace(/-/g, '_')}_${index} = document.getElementById('${element.id}');\n`;
-        html += `      if (element${element.id.replace(/-/g, '_')}_${index}) {\n`;
-        
-        // Generate animation code based on type
-        switch (animation.type) {
-          case 'fade':
-            html += `        element${element.id.replace(/-/g, '_')}_${index}.style.transition = 'opacity ${animation.duration}ms ${animation.easing || 'ease'} ${animation.delay || 0}ms';\n`;
-            html += `        element${element.id.replace(/-/g, '_')}_${index}.style.opacity = '${animation.direction === 'out' ? '1' : '0'}';\n`;
-            html += `        setTimeout(() => { element${element.id.replace(/-/g, '_')}_${index}.style.opacity = '${animation.direction === 'out' ? '0' : '1'}'; }, 50);\n`;
-            break;
-          case 'slide':
-            html += `        element${element.id.replace(/-/g, '_')}_${index}.style.transition = 'transform ${animation.duration}ms ${animation.easing || 'ease'} ${animation.delay || 0}ms';\n`;
-            html += `        element${element.id.replace(/-/g, '_')}_${index}.style.transform = 'translateY(${animation.direction === 'in' ? '50px' : '0'})';\n`;
-            html += `        setTimeout(() => { element${element.id.replace(/-/g, '_')}_${index}.style.transform = 'translateY(${animation.direction === 'in' ? '0' : '50px'})'; }, 50);\n`;
-            break;
-          // Add other animation types
-        }
-        
-        html += `      }\n`;
-      });
-    });
-    html += '    });\n';
-  }
-  
-  // Add event handlers for actions
-  const elementsWithActions = elements.filter(el => el.actions && el.actions.length > 0);
-  if (elementsWithActions.length > 0) {
-    html += '    document.addEventListener(\'DOMContentLoaded\', function() {\n';
-    elementsWithActions.forEach(element => {
-      element.actions?.forEach((action, index) => {
-        html += `      // Action for ${element.id} - ${action.type} on ${action.eventType}\n`;
-        html += `      const actionElement${element.id.replace(/-/g, '_')}_${index} = document.getElementById('${element.id}');\n`;
-        html += `      if (actionElement${element.id.replace(/-/g, '_')}_${index}) {\n`;
-        
-        // Generate event handler based on action type
-        const eventName = action.eventType === 'custom' ? action.customEvent || 'click' : action.eventType;
-        html += `        actionElement${element.id.replace(/-/g, '_')}_${index}.addEventListener('${eventName}', function(event) {\n`;
-        
-        switch (action.type) {
-          case 'link':
-            if (action.url) {
-              html += `          window.location.href = '${action.url}';\n`;
-            }
-            break;
-          case 'scroll':
-            if (action.target) {
-              html += `          document.getElementById('${action.target}')?.scrollIntoView({ behavior: 'smooth' });\n`;
-            }
-            break;
-          case 'toggle':
-            if (action.target) {
-              html += `          const targetEl = document.getElementById('${action.target}');\n`;
-              html += `          if (targetEl) targetEl.style.display = targetEl.style.display === 'none' ? 'block' : 'none';\n`;
-            }
-            break;
-          case 'custom':
-            if (action.script) {
-              html += `          ${action.script}\n`;
-            }
-            break;
-          // Add other action types
-        }
-        
-        html += `        });\n`;
-        html += `      }\n`;
-      });
-    });
-    html += '    });\n';
-  }
-  
-  // Add custom JS if provided
-  elements.forEach(element => {
-    if (element.customCode?.js) {
-      html += `    // Custom JS for ${element.id}\n`;
-      html += `    ${element.customCode.js}\n`;
-    }
-  });
-  
-  html += '  </script>\n';
-  html += '</body>\n</html>';
-  
-  return html;
-};
-
-// Helper function já definida anteriormente
+}
 
 export const useEditorStore = create<EditorState>()(
   persist(
     (set, get) => ({
-      // Implementation of all the missing functions and state defined in EditorState interface
-      // Initial state
+      // Estado inicial
       elements: [],
       selectedElementId: null,
       multipleSelection: [],
@@ -503,7 +324,7 @@ export const useEditorStore = create<EditorState>()(
       
       // UI State
       activePanel: 'elements',
-      codeEditorOpen: true,
+      codeEditorOpen: false,
       codeEditorHeight: 250,
       codeEditorLanguage: 'html',
       codeEditorContent: '',
@@ -563,10 +384,37 @@ export const useEditorStore = create<EditorState>()(
         get().createSnapshot();
       },
       
+      // Funções para manipulação de seleção
       selectElement: (id) => {
-        set({ selectedElementId: id });
+        set({ selectedElementId: id, multipleSelection: id ? [id] : [] });
       },
       
+      selectMultipleElements: (ids) => {
+        set({ multipleSelection: ids, selectedElementId: ids.length > 0 ? ids[0] : null });
+      },
+      
+      toggleElementSelection: (id) => {
+        set((state) => {
+          // Se o elemento já está na seleção múltipla, remova-o
+          if (state.multipleSelection.includes(id)) {
+            const newSelection = state.multipleSelection.filter(elementId => elementId !== id);
+            return { 
+              multipleSelection: newSelection,
+              selectedElementId: newSelection.length > 0 ? newSelection[0] : null
+            };
+          } 
+          // Caso contrário, adicione-o à seleção
+          else {
+            const newSelection = [...state.multipleSelection, id];
+            return { 
+              multipleSelection: newSelection,
+              selectedElementId: newSelection.length > 0 ? newSelection[0] : null
+            };
+          }
+        });
+      },
+      
+      // Funções básicas de manipulação de elementos
       updateElementPosition: (id, dx, dy) => {
         set((state) => {
           const newElements = state.elements.map((el) => {
@@ -580,7 +428,7 @@ export const useEditorStore = create<EditorState>()(
             return el;
           });
           
-          return { elements: newElements };
+          return { elements: newElements, unsavedChanges: true };
         });
       },
       
@@ -596,7 +444,7 @@ export const useEditorStore = create<EditorState>()(
             return el;
           });
           
-          return { elements: newElements };
+          return { elements: newElements, unsavedChanges: true };
         });
       },
       
@@ -615,7 +463,7 @@ export const useEditorStore = create<EditorState>()(
             return el;
           });
           
-          return { elements: newElements };
+          return { elements: newElements, unsavedChanges: true };
         });
       },
       
@@ -631,10 +479,11 @@ export const useEditorStore = create<EditorState>()(
             return el;
           });
           
-          return { elements: newElements };
+          return { elements: newElements, unsavedChanges: true };
         });
       },
       
+      // Funções para eliminar/duplicar elementos
       deleteElement: (id) => {
         set((state) => {
           // Remove the element and its children recursively
@@ -659,11 +508,36 @@ export const useEditorStore = create<EditorState>()(
           
           return { 
             elements: newElements,
-            selectedElementId: newSelectedId
+            selectedElementId: newSelectedId,
+            unsavedChanges: true
           };
         });
         
         // Create a new snapshot for history
+        get().createSnapshot();
+      },
+      
+      deleteSelectedElements: () => {
+        const { multipleSelection } = get();
+        
+        if (multipleSelection.length === 0) return;
+        
+        set((state) => {
+          // Use um Set para eficiência na verificação
+          const idsToRemove = new Set(multipleSelection);
+          
+          // Filtrar os elementos, removendo todos os selecionados
+          const newElements = state.elements.filter(el => !idsToRemove.has(el.id));
+          
+          return {
+            elements: newElements,
+            selectedElementId: null,
+            multipleSelection: [],
+            unsavedChanges: true
+          };
+        });
+        
+        // Criar um novo snapshot para histórico
         get().createSnapshot();
       },
       
@@ -685,6 +559,7 @@ export const useEditorStore = create<EditorState>()(
           return {
             elements: [...state.elements, duplicatedElement],
             selectedElementId: newId,
+            unsavedChanges: true
           };
         });
         
@@ -692,6 +567,47 @@ export const useEditorStore = create<EditorState>()(
         get().createSnapshot();
       },
       
+      // Duplicar todos os elementos selecionados de uma vez
+      duplicateSelectedElements: () => {
+        const { multipleSelection } = get();
+        
+        if (multipleSelection.length === 0) return;
+        
+        set((state) => {
+          const elementsToDuplicate = state.elements.filter(el => multipleSelection.includes(el.id));
+          const newElements = [...state.elements];
+          const newIds: string[] = [];
+          
+          // Criar cópias de todos os elementos selecionados
+          elementsToDuplicate.forEach(element => {
+            const newId = `element-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+            newIds.push(newId);
+            
+            const duplicatedElement: Element = {
+              ...structuredClone(element),
+              id: newId,
+              x: element.x + 20, // Deslocar um pouco para facilitar a identificação visual
+              y: element.y + 20,
+              children: [],
+              parent: undefined,
+            };
+            
+            newElements.push(duplicatedElement);
+          });
+          
+          return {
+            elements: newElements,
+            selectedElementId: newIds[0] || null,
+            multipleSelection: newIds,
+            unsavedChanges: true
+          };
+        });
+        
+        // Criar um novo snapshot para histórico
+        get().createSnapshot();
+      },
+      
+      // Funções para mudança de ordem dos elementos
       moveElementUp: (id) => {
         set((state) => {
           const index = state.elements.findIndex(el => el.id === id);
@@ -706,7 +622,7 @@ export const useEditorStore = create<EditorState>()(
           newElements[index].zIndex = index + 1;
           newElements[index + 1].zIndex = index + 2;
           
-          return { elements: newElements };
+          return { elements: newElements, unsavedChanges: true };
         });
       },
       
@@ -724,7 +640,47 @@ export const useEditorStore = create<EditorState>()(
           newElements[index].zIndex = index + 1;
           newElements[index - 1].zIndex = index;
           
-          return { elements: newElements };
+          return { elements: newElements, unsavedChanges: true };
+        });
+      },
+      
+      moveElementToFront: (id) => {
+        set((state) => {
+          const index = state.elements.findIndex(el => el.id === id);
+          if (index === -1 || index === state.elements.length - 1) return state;
+          
+          const elementToMove = state.elements[index];
+          const newElements = [
+            ...state.elements.slice(0, index),
+            ...state.elements.slice(index + 1),
+            elementToMove
+          ];
+          
+          // Update zIndexes
+          return { 
+            elements: newElements.map((el, i) => ({ ...el, zIndex: i + 1 })),
+            unsavedChanges: true
+          };
+        });
+      },
+      
+      moveElementToBack: (id) => {
+        set((state) => {
+          const index = state.elements.findIndex(el => el.id === id);
+          if (index <= 0) return state;
+          
+          const elementToMove = state.elements[index];
+          const newElements = [
+            elementToMove,
+            ...state.elements.slice(0, index),
+            ...state.elements.slice(index + 1)
+          ];
+          
+          // Update zIndexes
+          return { 
+            elements: newElements.map((el, i) => ({ ...el, zIndex: i + 1 })),
+            unsavedChanges: true
+          };
         });
       },
       
@@ -740,10 +696,365 @@ export const useEditorStore = create<EditorState>()(
             return el;
           });
           
-          return { elements: newElements };
+          return { elements: newElements, unsavedChanges: true };
         });
       },
       
+      lockElement: (id, locked) => {
+        set((state) => {
+          const newElements = state.elements.map((el) => {
+            if (el.id === id) {
+              return {
+                ...el,
+                locked,
+              };
+            }
+            return el;
+          });
+          
+          return { elements: newElements, unsavedChanges: true };
+        });
+      },
+      
+      // Funções avançadas de manipulação de elementos
+      alignElements: (elementIds, alignment) => {
+        set((state) => {
+          if (elementIds.length <= 1) return state;
+          
+          // Find min/max coordinates to determine boundaries
+          const elements = state.elements.filter(el => elementIds.includes(el.id));
+          const minX = Math.min(...elements.map(el => el.x));
+          const maxX = Math.max(...elements.map(el => el.x + el.width));
+          const minY = Math.min(...elements.map(el => el.y));
+          const maxY = Math.max(...elements.map(el => el.y + el.height));
+          const centerX = minX + (maxX - minX) / 2;
+          const centerY = minY + (maxY - minY) / 2;
+          
+          // Update element positions based on alignment
+          const newElements = state.elements.map(el => {
+            if (!elementIds.includes(el.id)) return el;
+            
+            let updates = {};
+            switch(alignment) {
+              case 'left':
+                updates = { x: minX };
+                break;
+              case 'center':
+                updates = { x: centerX - el.width / 2 };
+                break;
+              case 'right':
+                updates = { x: maxX - el.width };
+                break;
+              case 'top':
+                updates = { y: minY };
+                break;
+              case 'middle':
+                updates = { y: centerY - el.height / 2 };
+                break;
+              case 'bottom':
+                updates = { y: maxY - el.height };
+                break;
+            }
+            
+            return { ...el, ...updates };
+          });
+          
+          return { elements: newElements, unsavedChanges: true };
+        });
+        
+        // Create a snapshot for history
+        get().createSnapshot();
+      },
+      
+      distributeElements: (elementIds, distribution) => {
+        set((state) => {
+          if (elementIds.length <= 2) return state;
+          
+          const elements = state.elements.filter(el => elementIds.includes(el.id));
+          
+          // Sort elements by position
+          const sortedElements = distribution === 'horizontal'
+            ? [...elements].sort((a, b) => a.x - b.x)
+            : [...elements].sort((a, b) => a.y - b.y);
+          
+          // Calculate total space and spacing
+          const firstElement = sortedElements[0];
+          const lastElement = sortedElements[sortedElements.length - 1];
+          let totalSpace;
+          
+          if (distribution === 'horizontal') {
+            totalSpace = (lastElement.x + lastElement.width) - firstElement.x;
+            const usedSpace = sortedElements.reduce((sum, el) => sum + el.width, 0);
+            const availableSpace = totalSpace - usedSpace;
+            const spacing = availableSpace / (sortedElements.length - 1);
+            
+            // Set new positions with equal spacing
+            let currentX = firstElement.x + firstElement.width + spacing;
+            const newElements = state.elements.map(el => {
+              if (!elementIds.includes(el.id)) return el;
+              if (el.id === firstElement.id || el.id === lastElement.id) return el;
+              
+              const updatedEl = { ...el, x: currentX };
+              currentX += el.width + spacing;
+              return updatedEl;
+            });
+            
+            return { elements: newElements, unsavedChanges: true };
+          } else {  // vertical distribution
+            totalSpace = (lastElement.y + lastElement.height) - firstElement.y;
+            const usedSpace = sortedElements.reduce((sum, el) => sum + el.height, 0);
+            const availableSpace = totalSpace - usedSpace;
+            const spacing = availableSpace / (sortedElements.length - 1);
+            
+            // Set new positions with equal spacing
+            let currentY = firstElement.y + firstElement.height + spacing;
+            const newElements = state.elements.map(el => {
+              if (!elementIds.includes(el.id)) return el;
+              if (el.id === firstElement.id || el.id === lastElement.id) return el;
+              
+              const updatedEl = { ...el, y: currentY };
+              currentY += el.height + spacing;
+              return updatedEl;
+            });
+            
+            return { elements: newElements, unsavedChanges: true };
+          }
+        });
+        
+        // Create a snapshot for history
+        get().createSnapshot();
+      },
+      
+      // Implementação do agrupamento de elementos
+      groupElements: (elementIds) => {
+        set((state) => {
+          if (elementIds.length <= 1) return state;
+          
+          const elementsToGroup = state.elements.filter(el => elementIds.includes(el.id));
+          
+          // Find boundaries of the group
+          const minX = Math.min(...elementsToGroup.map(el => el.x));
+          const minY = Math.min(...elementsToGroup.map(el => el.y));
+          const maxX = Math.max(...elementsToGroup.map(el => el.x + el.width));
+          const maxY = Math.max(...elementsToGroup.map(el => el.y + el.height));
+          
+          // Create a container element
+          const containerId = generateId('group');
+          const containerElement: Element = {
+            id: containerId,
+            type: 'group',
+            name: 'Grupo',
+            x: minX,
+            y: minY,
+            width: maxX - minX,
+            height: maxY - minY,
+            children: elementIds,
+            visible: true,
+            zIndex: Math.max(...elementsToGroup.map(el => el.zIndex || 0)) + 1,
+            styles: {
+              backgroundColor: 'transparent',
+              border: '1px dashed #888',
+            },
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          
+          // Update child elements to reference the container
+          const updatedElements = state.elements.map(el => {
+            if (elementIds.includes(el.id)) {
+              return {
+                ...el,
+                parent: containerId,
+                // Adjust coordinates relative to container
+                x: el.x - minX,
+                y: el.y - minY,
+              };
+            }
+            return el;
+          });
+          
+          return {
+            elements: [...updatedElements, containerElement],
+            selectedElementId: containerId,
+            multipleSelection: [containerId],
+            unsavedChanges: true
+          };
+        });
+        
+        // Create a snapshot for history
+        get().createSnapshot();
+      },
+      
+      ungroupElements: (groupId) => {
+        set((state) => {
+          const groupElement = state.elements.find(el => el.id === groupId && el.type === 'group');
+          if (!groupElement || !groupElement.children) return state;
+          
+          // Get the absolute position of the group
+          const groupX = groupElement.x;
+          const groupY = groupElement.y;
+          
+          // Update child elements to remove parent reference and adjust coordinates
+          const updatedElements = state.elements.map(el => {
+            if (el.parent === groupId) {
+              return {
+                ...el,
+                parent: undefined,
+                // Adjust coordinates to be absolute again
+                x: el.x + groupX,
+                y: el.y + groupY,
+              };
+            }
+            return el;
+          });
+          
+          // Remove the group element
+          const filteredElements = updatedElements.filter(el => el.id !== groupId);
+          
+          return {
+            elements: filteredElements,
+            selectedElementId: null,
+            multipleSelection: groupElement.children || [],
+            unsavedChanges: true
+          };
+        });
+        
+        // Create a snapshot for history
+        get().createSnapshot();
+      },
+      
+      // Funções para manipulação de animações
+      addAnimation: (elementId, animation) => {
+        set((state) => {
+          const newElements = state.elements.map((el) => {
+            if (el.id === elementId) {
+              return {
+                ...el,
+                animations: [...(el.animations || []), animation],
+              };
+            }
+            return el;
+          });
+          
+          return { elements: newElements, unsavedChanges: true };
+        });
+      },
+      
+      removeAnimation: (elementId, animationIndex) => {
+        set((state) => {
+          const newElements = state.elements.map((el) => {
+            if (el.id === elementId && el.animations) {
+              return {
+                ...el,
+                animations: el.animations.filter((_, index) => index !== animationIndex),
+              };
+            }
+            return el;
+          });
+          
+          return { elements: newElements, unsavedChanges: true };
+        });
+      },
+      
+      updateAnimation: (elementId, animationIndex, updates) => {
+        set((state) => {
+          const newElements = state.elements.map((el) => {
+            if (el.id === elementId && el.animations && el.animations[animationIndex]) {
+              const newAnimations = [...el.animations];
+              newAnimations[animationIndex] = {
+                ...newAnimations[animationIndex],
+                ...updates,
+              };
+              return {
+                ...el,
+                animations: newAnimations,
+              };
+            }
+            return el;
+          });
+          
+          return { elements: newElements, unsavedChanges: true };
+        });
+      },
+      
+      // Funções para manipulação de ações
+      addAction: (elementId, action) => {
+        set((state) => {
+          const newElements = state.elements.map((el) => {
+            if (el.id === elementId) {
+              return {
+                ...el,
+                actions: [...(el.actions || []), action],
+              };
+            }
+            return el;
+          });
+          
+          return { elements: newElements, unsavedChanges: true };
+        });
+      },
+      
+      removeAction: (elementId, actionIndex) => {
+        set((state) => {
+          const newElements = state.elements.map((el) => {
+            if (el.id === elementId && el.actions) {
+              return {
+                ...el,
+                actions: el.actions.filter((_, index) => index !== actionIndex),
+              };
+            }
+            return el;
+          });
+          
+          return { elements: newElements, unsavedChanges: true };
+        });
+      },
+      
+      updateAction: (elementId, actionIndex, updates) => {
+        set((state) => {
+          const newElements = state.elements.map((el) => {
+            if (el.id === elementId && el.actions && el.actions[actionIndex]) {
+              const newActions = [...el.actions];
+              newActions[actionIndex] = {
+                ...newActions[actionIndex],
+                ...updates,
+              };
+              return {
+                ...el,
+                actions: newActions,
+              };
+            }
+            return el;
+          });
+          
+          return { elements: newElements, unsavedChanges: true };
+        });
+      },
+      
+      // Funções para responsividade
+      updateResponsiveStyles: (elementId, deviceType, styles) => {
+        set((state) => {
+          const newElements = state.elements.map((el) => {
+            if (el.id === elementId) {
+              return {
+                ...el,
+                responsive: {
+                  ...el.responsive,
+                  [deviceType]: {
+                    ...el.responsive?.[deviceType],
+                    ...styles,
+                  },
+                },
+              };
+            }
+            return el;
+          });
+          
+          return { elements: newElements, unsavedChanges: true };
+        });
+      },
+      
+      // Funções para histórico
       createSnapshot: () => {
         set((state) => {
           // Add current state to history, removing any future states if we've gone back in time
@@ -766,6 +1077,7 @@ export const useEditorStore = create<EditorState>()(
             return {
               elements: cloneElements(state.history[newIndex]),
               historyIndex: newIndex,
+              unsavedChanges: true
             };
           }
           return state;
@@ -779,16 +1091,150 @@ export const useEditorStore = create<EditorState>()(
             return {
               elements: cloneElements(state.history[newIndex]),
               historyIndex: newIndex,
+              unsavedChanges: true
             };
           }
           return state;
         });
       },
       
+      clearHistory: () => {
+        set((state) => ({
+          history: [cloneElements(state.elements)],
+          historyIndex: 0,
+        }));
+      },
+      
+      // Funções para a área de transferência
+      copyElement: (id) => {
+        set((state) => {
+          const elementToCopy = state.elements.find(el => el.id === id);
+          if (!elementToCopy) return state;
+          
+          return {
+            copiedElement: structuredClone(elementToCopy),
+            clipboard: {
+              elements: [structuredClone(elementToCopy)],
+              type: 'copy'
+            }
+          };
+        });
+      },
+      
+      copySelectedElements: () => {
+        set((state) => {
+          const elementsToCopy = state.elements.filter(el => 
+            state.multipleSelection.includes(el.id));
+          
+          if (elementsToCopy.length === 0) return state;
+          
+          return {
+            copiedElements: structuredClone(elementsToCopy),
+            clipboard: {
+              elements: structuredClone(elementsToCopy),
+              type: 'copy'
+            }
+          };
+        });
+      },
+      
+      cutElement: (id) => {
+        const { elements } = get();
+        const elementToCut = elements.find(el => el.id === id);
+        if (!elementToCut) return;
+        
+        // First copy the element
+        set({
+          copiedElement: structuredClone(elementToCut),
+          clipboard: {
+            elements: [structuredClone(elementToCut)],
+            type: 'cut'
+          }
+        });
+        
+        // Then remove it
+        get().deleteElement(id);
+      },
+      
+      cutSelectedElements: () => {
+        const { elements, multipleSelection } = get();
+        const elementsToCut = elements.filter(el => multipleSelection.includes(el.id));
+        
+        if (elementsToCut.length === 0) return;
+        
+        // First copy the elements
+        set({
+          copiedElements: structuredClone(elementsToCut),
+          clipboard: {
+            elements: structuredClone(elementsToCut),
+            type: 'cut'
+          }
+        });
+        
+        // Then remove them
+        get().deleteSelectedElements();
+      },
+      
+      paste: (x, y) => {
+        const { clipboard } = get();
+        if (!clipboard.elements || clipboard.elements.length === 0) return;
+        
+        set((state) => {
+          // Get current cursor position if not provided
+          const targetX = x !== undefined ? x : state.canvasWidth / 2;
+          const targetY = y !== undefined ? y : state.canvasHeight / 2;
+          
+          // If multiple elements are being pasted, we need to find their relative positions
+          let offsetX = 0;
+          let offsetY = 0;
+          
+          if (clipboard.elements.length > 1) {
+            // Find the bounding box of the copied elements
+            const minX = Math.min(...clipboard.elements.map(el => el.x));
+            const minY = Math.min(...clipboard.elements.map(el => el.y));
+            offsetX = targetX - minX;
+            offsetY = targetY - minY;
+          } else if (clipboard.elements.length === 1) {
+            offsetX = targetX - clipboard.elements[0].x;
+            offsetY = targetY - clipboard.elements[0].y;
+          }
+          
+          // Create new elements with new IDs
+          const newPastedElements = clipboard.elements.map(el => ({
+            ...structuredClone(el),
+            id: generateId(el.type),
+            x: el.x + offsetX,
+            y: el.y + offsetY,
+            parent: undefined, // Clear parent reference
+            children: [], // Clear children references
+          }));
+          
+          // Select the newly pasted elements
+          const newIds = newPastedElements.map(el => el.id);
+          
+          return {
+            elements: [...state.elements, ...newPastedElements],
+            selectedElementId: newIds[0],
+            multipleSelection: newIds,
+            unsavedChanges: true
+          };
+        });
+        
+        // Create a snapshot for history
+        get().createSnapshot();
+        
+        // Clear the clipboard if it was a cut operation
+        if (get().clipboard.type === 'cut') {
+          set({ clipboard: { elements: [], type: null } });
+        }
+      },
+      
+      // Funções para templates, projetos e páginas
       loadTemplate: (elements) => {
         set(() => ({
           elements: cloneElements(elements),
           selectedElementId: null,
+          unsavedChanges: true
         }));
         
         // Create a new snapshot for history
@@ -799,6 +1245,7 @@ export const useEditorStore = create<EditorState>()(
         set(() => ({
           elements: [],
           selectedElementId: null,
+          unsavedChanges: true
         }));
         
         // Create a new snapshot for history
@@ -883,406 +1330,128 @@ export const useEditorStore = create<EditorState>()(
           return { 
             success: false, 
             message: 'Erro ao salvar projeto', 
-            error: String(error) 
+            error: String(error),
+            projectName: updatedProject.name,
+            isNew: false
           };
         }
       },
       
-      loadProject: async (projectId) => {
-        try {
-          // In a real application, this would fetch from API
-          // Example:
-          // const project = await apiRequest('GET', `/api/projects/${projectId}`).then(res => res.json());
-          
-          // For now, use mock data if project exists in localStorage
-          // Would be replaced with actual API call in production
-          set({ currentProject: null, elements: [], selectedElementId: null });
-          
-          // Create a new snapshot for history
-          get().createSnapshot();
-          
-          return Promise.resolve();
-        } catch (error) {
-          console.error('Failed to load project:', error);
-          return Promise.reject(error);
-        }
+      // Funções para controle da interface
+      setViewMode: (mode) => {
+        set({ viewMode: mode });
       },
       
-      // Implementação das funções de Alinhamento
-      alignElements: (elementIds, alignment) => {
-        set((state) => {
-          if (elementIds.length <= 1) return state;
-          
-          // Find min/max coordinates to determine boundaries
-          const elements = state.elements.filter(el => elementIds.includes(el.id));
-          const minX = Math.min(...elements.map(el => el.x));
-          const maxX = Math.max(...elements.map(el => el.x + el.width));
-          const minY = Math.min(...elements.map(el => el.y));
-          const maxY = Math.max(...elements.map(el => el.y + el.height));
-          const centerX = minX + (maxX - minX) / 2;
-          const centerY = minY + (maxY - minY) / 2;
-          
-          // Update element positions based on alignment
-          const newElements = state.elements.map(el => {
-            if (!elementIds.includes(el.id)) return el;
-            
-            let updates = {};
-            switch(alignment) {
-              case 'left':
-                updates = { x: minX };
-                break;
-              case 'center':
-                updates = { x: centerX - el.width / 2 };
-                break;
-              case 'right':
-                updates = { x: maxX - el.width };
-                break;
-              case 'top':
-                updates = { y: minY };
-                break;
-              case 'middle':
-                updates = { y: centerY - el.height / 2 };
-                break;
-              case 'bottom':
-                updates = { y: maxY - el.height };
-                break;
-            }
-            
-            return { ...el, ...updates };
-          });
-          
-          return { elements: newElements, unsavedChanges: true };
-        });
-        
-        // Create a snapshot for history
-        get().createSnapshot();
-      },
-
-      // Implementação da distribuição de elementos
-      distributeElements: (elementIds, distribution) => {
-        set((state) => {
-          if (elementIds.length <= 2) return state;
-          
-          const elements = state.elements.filter(el => elementIds.includes(el.id));
-          
-          // Sort elements by position
-          const sortedElements = distribution === 'horizontal'
-            ? [...elements].sort((a, b) => a.x - b.x)
-            : [...elements].sort((a, b) => a.y - b.y);
-          
-          // Calculate total space and spacing
-          const firstElement = sortedElements[0];
-          const lastElement = sortedElements[sortedElements.length - 1];
-          let totalSpace;
-          
-          if (distribution === 'horizontal') {
-            totalSpace = (lastElement.x + lastElement.width) - firstElement.x;
-            const usedSpace = sortedElements.reduce((sum, el) => sum + el.width, 0);
-            const availableSpace = totalSpace - usedSpace;
-            const spacing = availableSpace / (sortedElements.length - 1);
-            
-            // Set new positions with equal spacing
-            let currentX = firstElement.x + firstElement.width + spacing;
-            const newElements = state.elements.map(el => {
-              if (!elementIds.includes(el.id)) return el;
-              if (el.id === firstElement.id || el.id === lastElement.id) return el;
-              
-              const updatedEl = { ...el, x: currentX };
-              currentX += el.width + spacing;
-              return updatedEl;
-            });
-            
-            return { elements: newElements, unsavedChanges: true };
-          } else {  // vertical distribution
-            totalSpace = (lastElement.y + lastElement.height) - firstElement.y;
-            const usedSpace = sortedElements.reduce((sum, el) => sum + el.height, 0);
-            const availableSpace = totalSpace - usedSpace;
-            const spacing = availableSpace / (sortedElements.length - 1);
-            
-            // Set new positions with equal spacing
-            let currentY = firstElement.y + firstElement.height + spacing;
-            const newElements = state.elements.map(el => {
-              if (!elementIds.includes(el.id)) return el;
-              if (el.id === firstElement.id || el.id === lastElement.id) return el;
-              
-              const updatedEl = { ...el, y: currentY };
-              currentY += el.height + spacing;
-              return updatedEl;
-            });
-            
-            return { elements: newElements, unsavedChanges: true };
-          }
-        });
-        
-        // Create a snapshot for history
-        get().createSnapshot();
+      setEditorMode: (mode) => {
+        set({ editorMode: mode });
       },
       
-      // Implementação do agrupamento de elementos
-      groupElements: (elementIds) => {
-        set((state) => {
-          if (elementIds.length <= 1) return state;
-          
-          const elementsToGroup = state.elements.filter(el => elementIds.includes(el.id));
-          
-          // Find boundaries of the group
-          const minX = Math.min(...elementsToGroup.map(el => el.x));
-          const minY = Math.min(...elementsToGroup.map(el => el.y));
-          const maxX = Math.max(...elementsToGroup.map(el => el.x + el.width));
-          const maxY = Math.max(...elementsToGroup.map(el => el.y + el.height));
-          
-          // Create a container element for the group
-          const groupId = generateId('group');
-          const containerElement: Element = {
-            id: groupId,
-            type: ElementTypes.container,
-            name: `Grupo ${state.elements.filter(el => el.type === ElementTypes.container).length + 1}`,
-            x: minX,
-            y: minY,
-            width: maxX - minX,
-            height: maxY - minY,
-            styles: { backgroundColor: 'rgba(200, 200, 200, 0.1)', border: '1px dashed #aaa' },
-            children: elementIds,
-            visible: true,
-            zIndex: Math.min(...elementsToGroup.map(el => el.zIndex || 0)),
-            locked: false,
-            animations: [],
-            actions: [],
-            transform: { rotate: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 },
-            responsive: { mobile: {}, tablet: {} },
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          };
-          
-          // Update parent reference for all grouped elements
-          const updatedElements = state.elements.map(el => {
-            if (elementIds.includes(el.id)) {
-              return { ...el, parent: groupId };
-            }
-            return el;
-          });
-          
-          return { 
-            elements: [...updatedElements, containerElement],
-            selectedElementId: groupId,
-            unsavedChanges: true
-          };
-        });
-        
-        // Create a snapshot for history
-        get().createSnapshot();
+      setZoom: (zoom) => {
+        set({ zoom });
       },
       
-      // Implementação do desagrupamento de elementos
-      ungroupElements: (groupId) => {
-        set((state) => {
-          const groupElement = state.elements.find(el => el.id === groupId);
-          if (!groupElement || !groupElement.children || groupElement.children.length === 0) {
-            return state;
-          }
-          
-          // Update parent reference for all grouped elements
-          const updatedElements = state.elements.map(el => {
-            if (groupElement.children?.includes(el.id)) {
-              return { ...el, parent: undefined };
-            }
-            return el;
-          });
-          
-          // Remove the group container element
-          const filteredElements = updatedElements.filter(el => el.id !== groupId);
-          
-          return { 
-            elements: filteredElements,
-            selectedElementId: null,
-            unsavedChanges: true
-          };
-        });
-        
-        // Create a snapshot for history
-        get().createSnapshot();
+      togglePanel: (panel) => {
+        set((state) => ({
+          activePanel: state.activePanel === panel ? null : panel,
+        }));
       },
       
-      // UI Control implementations
-      toggleGrid: () => set(state => ({ showGrid: !state.showGrid })),
-      toggleSnapToGrid: () => set(state => ({ snapToGrid: !state.snapToGrid })),
-      toggleSnapToElements: () => set(state => ({ snapToElements: !state.snapToElements })),
-      toggleGuides: () => set(state => ({ showGuides: !state.showGuides })),
-      toggleRulers: () => set(state => ({ rulers: !state.rulers })),
+      setActivePanel: (panel) => {
+        set({ activePanel: panel });
+      },
+      
+      toggleCodeEditor: () => {
+        set((state) => ({
+          codeEditorOpen: !state.codeEditorOpen,
+        }));
+      },
+      
+      setCodeEditorHeight: (height) => {
+        set({ codeEditorHeight: height });
+      },
+      
+      setCodeEditorLanguage: (language) => {
+        set({ codeEditorLanguage: language });
+      },
+      
+      updateCodeEditorContent: (content) => {
+        set({ codeEditorContent: content });
+      },
+      
+      setGridSize: (size) => {
+        set({ gridSize: size });
+      },
+      
+      toggleGuides: () => {
+        set((state) => ({
+          showGuides: !state.showGuides,
+        }));
+      },
+      
+      toggleGrid: () => {
+        set((state) => ({
+          showGrid: !state.showGrid,
+        }));
+      },
+      
+      toggleSnapToGrid: () => {
+        set((state) => ({
+          snapToGrid: !state.snapToGrid,
+        }));
+      },
+      
+      toggleSnapToElements: () => {
+        set((state) => ({
+          snapToElements: !state.snapToElements,
+        }));
+      },
+      
+      toggleRulers: () => {
+        set((state) => ({
+          rulers: !state.rulers,
+        }));
+      },
+      
       toggleFullscreenPreview: () => {
-        // Implementação completa do modo de visualização em tela cheia
-        set(state => {
+        set((state) => {
           const newValue = !state.fullscreenPreview;
           
-          // Se estiver ativando o modo de tela cheia
+          // Adicionar/remover classe no body para estilização completa
           if (newValue) {
-            // Armazenar o estado anterior para restaurar depois
-            const previousState = {
-              activePanel: state.activePanel,
-              editorMode: state.editorMode,
-              zoom: state.zoom
-            };
-            
-            // Usar armazenamento local para persistir entre renders
-            sessionStorage.setItem('previousEditorState', JSON.stringify(previousState));
-            
-            // Entrar no modo de visualização com configurações otimizadas
-            return {
-              fullscreenPreview: true,
-              activePanel: null, // Ocultar todos os painéis
-              editorMode: 'preview', // Alternar para modo de visualização
-              zoom: 100 // Restaurar o zoom para 100%
-            };
+            document.body.classList.add('editor-fullscreen-mode');
           } else {
-            // Restaurar o estado anterior ao sair do modo de tela cheia
-            try {
-              const previousStateJson = sessionStorage.getItem('previousEditorState');
-              if (previousStateJson) {
-                const previousState = JSON.parse(previousStateJson);
-                return {
-                  fullscreenPreview: false,
-                  activePanel: previousState.activePanel,
-                  editorMode: previousState.editorMode,
-                  zoom: previousState.zoom
-                };
-              }
-            } catch (e) {
-              console.error('Erro ao restaurar estado anterior:', e);
-            }
-            
-            // Caso ocorra algum problema, apenas sair do modo de tela cheia
-            return { fullscreenPreview: false };
+            document.body.classList.remove('editor-fullscreen-mode');
           }
+          
+          return { fullscreenPreview: newValue };
         });
-        
-        // Aplicar efeitos no documento HTML para verdadeira visualização em tela cheia
-        if (get().fullscreenPreview) {
-          // Tentar usar a API Fullscreen se disponível
-          const element = document.documentElement;
-          if (element.requestFullscreen) {
-            element.requestFullscreen().catch(err => {
-              console.error('Erro ao ativar modo de tela cheia:', err);
-            });
-          }
-          
-          // Adicionar uma classe ao body para estilização
-          document.body.classList.add('editor-fullscreen-mode');
-        } else {
-          // Sair do modo de tela cheia do navegador
-          if (document.exitFullscreen && document.fullscreenElement) {
-            document.exitFullscreen().catch(err => {
-              console.error('Erro ao sair do modo de tela cheia:', err);
-            });
-          }
-          
-          // Remover a classe do body
-          document.body.classList.remove('editor-fullscreen-mode');
-        }
       },
       
-      // Multiple selection implementations
-      selectMultipleElements: (ids) => set({ multipleSelection: ids }),
-      toggleElementSelection: (id) => set(state => {
-        const isSelected = state.multipleSelection.includes(id);
-        if (isSelected) {
-          return { multipleSelection: state.multipleSelection.filter(item => item !== id) };
-        } else {
-          return { multipleSelection: [...state.multipleSelection, id] };
-        }
-      }),
-      
-      // Multiple selection operations
-      deleteSelectedElements: () => {
-        set(state => {
-          if (state.multipleSelection.length === 0 && state.selectedElementId) {
-            return { 
-              elements: state.elements.filter(el => el.id !== state.selectedElementId),
-              selectedElementId: null
-            };
-          }
-          
-          return { 
-            elements: state.elements.filter(el => !state.multipleSelection.includes(el.id)),
-            multipleSelection: [],
-            selectedElementId: null
-          };
-        });
-        
-        get().createSnapshot();
+      setTheme: (theme) => {
+        set({ theme });
       },
       
-      duplicateSelectedElements: () => {
-        set(state => {
-          if (state.multipleSelection.length === 0 && state.selectedElementId) {
-            const elementToDuplicate = state.elements.find(el => el.id === state.selectedElementId);
-            if (!elementToDuplicate) return state;
-            
-            const duplicatedElement = {
-              ...structuredClone(elementToDuplicate),
-              id: `element-${Date.now()}`,
-              x: elementToDuplicate.x + 20,
-              y: elementToDuplicate.y + 20,
-              children: [],
-              parent: undefined,
-            };
-            
-            return { 
-              elements: [...state.elements, duplicatedElement],
-              selectedElementId: duplicatedElement.id
-            };
-          }
-          
-          const elementsToDuplicate = state.elements.filter(el => 
-            state.multipleSelection.includes(el.id));
-          
-          const duplicatedElements = elementsToDuplicate.map(el => ({
-            ...structuredClone(el),
-            id: `element-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-            x: el.x + 20,
-            y: el.y + 20,
-            children: [],
-            parent: undefined,
-          }));
-          
-          const newMultipleSelection = duplicatedElements.map(el => el.id);
-          
-          return { 
-            elements: [...state.elements, ...duplicatedElements],
-            multipleSelection: newMultipleSelection,
-            selectedElementId: null
-          };
-        });
-        
-        get().createSnapshot();
+      resizePropertyPanel: (width) => {
+        set({ propertyPanelWidth: width });
       },
       
-      createNewProject: (name, description) => {
-        const newProject: Project = {
-          id: `project-${Date.now()}`,
-          name,
-          description,
-          pages: [
-            {
-              id: `page-${Date.now()}`,
-              name: 'Home',
-              isHomepage: true,
-              elements: [],
-            },
-          ],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        
-        set({
-          currentProject: newProject,
-          currentPageId: newProject.pages[0].id,
-          elements: [],
-          selectedElementId: null,
-        });
-        
-        // Create a new snapshot for history
-        get().createSnapshot();
+      resizeElementLibrary: (width) => {
+        set({ elementLibraryWidth: width });
       },
+
+      // Funções ainda não implementadas completamente
+      loadProject: async () => Promise.resolve(),
+      createNewProject: () => {},
+      addPage: () => undefined,
+      removePage: () => {},
+      renamePage: () => {},
+      duplicatePage: () => {},
+      setCurrentPage: () => {},
+      updatePageMetadata: () => {},
+      importProject: () => {},
+      exportProject: () => '',
+      exportHtml: () => '',
+      publishProject: async () => ({ url: '' }),
     }),
     {
       name: 'editor-storage',
