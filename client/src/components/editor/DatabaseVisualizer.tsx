@@ -38,7 +38,7 @@ interface TableData {
   totalCount: number;
 }
 
-export function DatabaseVisualizer({ projectId = '1' }: DatabaseVisualizerProps) {
+export function DatabaseVisualizer({ projectId = 'default' }: DatabaseVisualizerProps) {
   const { toast } = useToast();
   const [tables, setTables] = useState<DatabaseTable[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -62,8 +62,22 @@ export function DatabaseVisualizer({ projectId = '1' }: DatabaseVisualizerProps)
   const loadTables = async () => {
     setIsLoading(true);
     try {
-      const response = await apiRequest('GET', `/api/database/tables`);
-      // Futuramente poderemos filtrar por projeto, mas por enquanto listaremos todas as tabelas
+      // Obtém o ID do projeto baseado nas props ou do URL
+      const currentProjectId = projectId === 'default'
+        ? new URLSearchParams(window.location.search).get('id') || null
+        : projectId;
+      
+      if (!currentProjectId) {
+        toast({
+          title: "Projeto não identificado",
+          description: "Não foi possível identificar o ID do projeto atual.",
+          variant: "destructive"
+        });
+        setIsLoading(false);
+        return;
+      }
+      
+      const response = await apiRequest('GET', `/api/database/tables?projectId=${currentProjectId}`);
       const data = await response.json();
       
       if (response.ok) {
@@ -99,12 +113,27 @@ export function DatabaseVisualizer({ projectId = '1' }: DatabaseVisualizerProps)
     setTableData(null);
     
     try {
+      // Obtém o ID do projeto baseado nas props ou do URL
+      const currentProjectId = projectId === 'default'
+        ? new URLSearchParams(window.location.search).get('id') || null
+        : projectId;
+      
+      if (!currentProjectId) {
+        toast({
+          title: "Projeto não identificado",
+          description: "Não foi possível identificar o ID do projeto atual.",
+          variant: "destructive"
+        });
+        setIsTableDataLoading(false);
+        return;
+      }
+      
       // Buscar schema da tabela para as informações estruturais
-      const schemaResponse = await apiRequest('GET', `/api/database/tables/${tableName}/schema`);
+      const schemaResponse = await apiRequest('GET', `/api/database/tables/${tableName}/schema?projectId=${currentProjectId}`);
       const schemaData = await schemaResponse.json();
       
       // Buscar os dados da tabela
-      const dataResponse = await apiRequest('GET', `/api/database/tables/${tableName}/data`);
+      const dataResponse = await apiRequest('GET', `/api/database/tables/${tableName}/data?projectId=${currentProjectId}`);
       const dataResult = await dataResponse.json();
       
       if (schemaResponse.ok && dataResponse.ok) {
