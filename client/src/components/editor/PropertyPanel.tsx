@@ -13,6 +13,7 @@ import AdvancedCssEditor from "./AdvancedCssEditor";
 import CssPresetLibrary from "./CssPresetLibrary";
 import AnimationEditor from "./AnimationEditor";
 import HtmlEditor from "./HtmlEditor";
+import DatabaseConnectionPanel from "./DatabaseConnectionPanel";
 
 const PropertyPanel = () => {
   const { 
@@ -561,18 +562,26 @@ const PropertyPanel = () => {
           )}
         </TabsContent>
         
-        <TabsContent value="data" className="flex-1 data-[state=inactive]:hidden p-4">
-          <div className="h-full flex items-center justify-center text-center">
-            <div>
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto mb-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
-              </svg>
-              <p className="text-muted-foreground mb-4">
-                Conecte elementos a fontes de dados dinâmicas e APIs
-              </p>
-              <Button disabled>Configurar Dados</Button>
+        <TabsContent value="data" className="flex-1 data-[state=inactive]:hidden p-0">
+          {selectedElement ? (
+            <DatabaseConnectionPanel 
+              element={selectedElement} 
+              onUpdateDatabaseConnection={(connection) => {
+                updateElementContent(selectedElement.id, { dataConnection: connection });
+              }}
+            />
+          ) : (
+            <div className="h-full flex items-center justify-center text-center p-4">
+              <div>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto mb-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                </svg>
+                <p className="text-muted-foreground mb-4">
+                  Selecione um elemento para conectá-lo a fontes de dados dinâmicas e APIs
+                </p>
+              </div>
             </div>
-          </div>
+          )}
         </TabsContent>
       </Tabs>
       

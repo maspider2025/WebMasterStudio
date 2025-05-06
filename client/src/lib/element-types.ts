@@ -23,6 +23,40 @@ export enum ElementTypes {
   footer = 'footer',
 }
 
+// Definição de um elemento na tela
+export interface Element {
+  id: string;
+  type: ElementTypes;
+  name?: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  content?: string;
+  styles?: Record<string, string>;
+  parent?: string;
+  children?: string[];
+  zIndex?: number;
+  locked?: boolean;
+  visible?: boolean;
+  cssClasses?: string[];
+  htmlAttributes?: Record<string, string>;
+  animations?: any[];
+  customCode?: {
+    html?: string;
+    css?: string;
+    js?: string;
+  };
+  dataConnection?: {
+    configured: boolean;
+    dataSource?: string;
+    operation?: string;
+    fields?: string[];
+    filters?: Array<{field: string; operator: string; value: string}>;
+    customQuery?: string;
+  };
+}
+
 export interface ElementType {
   type: ElementTypes;
   name: string;
