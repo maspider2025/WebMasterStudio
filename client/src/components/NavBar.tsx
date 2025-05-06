@@ -13,12 +13,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-interface Cart {
-  items: any[];
-}
-
 // Componente de botão de autenticação que alterna entre login e menu de usuário
-function AuthButton() {
+function AuthenticationButton() {
   const { user, isLoading, logoutMutation } = useAuth();
   const [, navigate] = useLocation();
 
@@ -97,6 +93,10 @@ function AuthButton() {
       </DropdownMenuContent>
     </DropdownMenu>
   );
+}
+
+interface Cart {
+  items: any[];
 }
 
 export function NavBar() {
@@ -196,8 +196,15 @@ export function NavBar() {
               >
                 GitHub
               </a>
-              {/* Componente de autenticação baseado no estado do usuário */}
-              <AuthButton />
+              {/* Botão de login temporariamente simplificado */}
+              <Link href="/auth">
+                <Button 
+                  size="sm" 
+                  className="bg-primary text-white hover:bg-primary/90"
+                >
+                  Login
+                </Button>
+              </Link>
             </div>
           </div>
         </div>
