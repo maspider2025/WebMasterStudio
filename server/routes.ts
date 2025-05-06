@@ -1261,6 +1261,436 @@ export async function registerRoutes(app: Express): Promise<Server> {
     await capturePaypalOrder(req, res);
   });
 
+  // Funções auxiliares para rotas de banco de dados dinâmico
+  function mapTypeToSQL(type: string): string {
+    switch (type.toLowerCase()) {
+      case 'string':
+        return 'VARCHAR(255)';
+      case 'text':
+        return 'TEXT';
+      case 'integer':
+      case 'int':
+        return 'INTEGER';
+      case 'number':
+      case 'float':
+      case 'decimal':
+        return 'NUMERIC';
+      case 'boolean':
+        return 'BOOLEAN';
+      case 'date':
+        return 'DATE';
+      case 'datetime':
+        return 'TIMESTAMP';
+      case 'json':
+        return 'JSONB';
+      default:
+        return 'VARCHAR(255)';
+    }
+  }
+
+  function formatSQLValue(value: any, type: string): string {
+    if (value === null || value === undefined) {
+      return 'NULL';
+    }
+
+    switch (type.toLowerCase()) {
+      case 'string':
+      case 'text':
+        return `'${value.toString().replace(/'/g, "''")}'`;
+      case 'date':
+      case 'datetime':
+        return `'${value}'`;
+      case 'boolean':
+        return value ? 'TRUE' : 'FALSE';
+      case 'json':
+        return `'${JSON.stringify(value).replace(/'/g, "''")}'::JSONB`;
+      default:
+        return `${value}`;
+    }
+  }
+
+  // Rotas para gerenciamento de banco de dados dinâmico
+  
+  // Endpoint para obter todas as tabelas criadas dinamicamente
+  app.get(`${apiPrefix}/database/tables`, async (req, res) => {
+    try {
+      // Buscar todas as tabelas disponíveis no banco de dados
+      const query = sql`
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_type = 'BASE TABLE'
+        AND table_name NOT IN ('_drizzle_migrations')
+        ORDER BY table_name;
+      `;
+      
+      const result = await db.execute(query);
+      const tables = result.rows.map((row: any) => row.table_name);
+      
+      res.json({ tables });
+    } catch (error) {
+      handleError(res, error, "Erro ao buscar tabelas do banco de dados");
+    }
+  });
+  
+  // Endpoint para obter schema de uma tabela específica
+  app.get(`${apiPrefix}/database/tables/:tableName/schema`, async (req, res) => {
+    try {
+      const { tableName } = req.params;
+      
+      // Consultar as colunas da tabela
+      const query = sql`
+        SELECT 
+          column_name, 
+          data_type, 
+          is_nullable, 
+          column_default,
+          character_maximum_length
+        FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = ${tableName}
+        ORDER BY ordinal_position;
+      `;
+      
+      const result = await db.execute(query);
+      
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "Tabela não encontrada" });
+      }
+      
+      // Buscar informações sobre as chaves primárias
+      const primaryKeyQuery = sql`
+        SELECT c.column_name
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.constraint_column_usage AS ccu USING (constraint_schema, constraint_name)
+        JOIN information_schema.columns AS c ON c.table_schema = tc.constraint_schema
+          AND tc.table_name = c.table_name AND ccu.column_name = c.column_name
+        WHERE tc.constraint_type = 'PRIMARY KEY' AND tc.table_name = ${tableName};
+      `;
+      
+      const primaryKeyResult = await db.execute(primaryKeyQuery);
+      const primaryKeys = primaryKeyResult.rows.map((row: any) => row.column_name);
+      
+      res.json({
+        tableName,
+        columns: result.rows,
+        primaryKeys
+      });
+    } catch (error) {
+      handleError(res, error, "Erro ao buscar schema da tabela");
+    }
+  });
+  
+  // Endpoint para buscar dados de uma tabela (com paginação e filtros)
+  app.get(`${apiPrefix}/database/tables/:tableName/data`, async (req, res) => {
+    try {
+      const { tableName } = req.params;
+      const page = Number(req.query.page) || 1;
+      const limit = Math.min(Number(req.query.limit) || 20, 100);
+      const offset = (page - 1) * limit;
+      
+      // Extrair filtros da query string
+      const filters: any[] = [];
+      Object.keys(req.query).forEach(key => {
+        const match = key.match(/^filter_(\d+)_(field|operator|value)$/);
+        if (match) {
+          const [, index, type] = match;
+          if (!filters[Number(index)]) filters[Number(index)] = {};
+          filters[Number(index)][type] = req.query[key];
+        }
+      });
+      
+      // Construir a consulta base
+      let queryText = `SELECT * FROM "${tableName}" WHERE 1=1`;
+      const queryParams: any[] = [];
+      
+      // Adicionar filtros à consulta
+      filters.forEach((filter, i) => {
+        if (filter && filter.field && filter.operator && filter.value !== undefined) {
+          const paramIndex = i + 1;
+          
+          switch (filter.operator) {
+            case 'equals':
+              queryText += ` AND "${filter.field}" = $${paramIndex}`;
+              queryParams.push(filter.value);
+              break;
+            case 'notEquals':
+              queryText += ` AND "${filter.field}" != $${paramIndex}`;
+              queryParams.push(filter.value);
+              break;
+            case 'contains':
+              queryText += ` AND "${filter.field}" ILIKE $${paramIndex}`;
+              queryParams.push(`%${filter.value}%`);
+              break;
+            case 'greaterThan':
+              queryText += ` AND "${filter.field}" > $${paramIndex}`;
+              queryParams.push(filter.value);
+              break;
+            case 'lessThan':
+              queryText += ` AND "${filter.field}" < $${paramIndex}`;
+              queryParams.push(filter.value);
+              break;
+          }
+        }
+      });
+      
+      // Adicionar ordenação, limite e offset
+      queryText += ` ORDER BY id DESC LIMIT ${limit} OFFSET ${offset}`;
+      
+      // Executar a consulta
+      const query = sql.raw(queryText, queryParams);
+      const result = await db.execute(query);
+      
+      // Contar o total de registros (para paginação)
+      let countQueryText = `SELECT COUNT(*) as total FROM "${tableName}" WHERE 1=1`;
+      
+      // Adicionar os mesmos filtros à consulta de contagem
+      filters.forEach((filter, i) => {
+        if (filter && filter.field && filter.operator && filter.value !== undefined) {
+          const paramIndex = i + 1;
+          
+          switch (filter.operator) {
+            case 'equals':
+              countQueryText += ` AND "${filter.field}" = $${paramIndex}`;
+              break;
+            case 'notEquals':
+              countQueryText += ` AND "${filter.field}" != $${paramIndex}`;
+              break;
+            case 'contains':
+              countQueryText += ` AND "${filter.field}" ILIKE $${paramIndex}`;
+              break;
+            case 'greaterThan':
+              countQueryText += ` AND "${filter.field}" > $${paramIndex}`;
+              break;
+            case 'lessThan':
+              countQueryText += ` AND "${filter.field}" < $${paramIndex}`;
+              break;
+          }
+        }
+      });
+      
+      const countQuery = sql.raw(countQueryText, queryParams);
+      const countResult = await db.execute(countQuery);
+      const total = Number(countResult.rows[0].total);
+      
+      res.json({
+        data: result.rows,
+        meta: {
+          pagination: {
+            total,
+            page,
+            limit,
+            pages: Math.ceil(total / limit)
+          }
+        }
+      });
+    } catch (error) {
+      handleError(res, error, "Erro ao buscar dados da tabela");
+    }
+  });
+  
+  // Endpoint para criar novo registro em uma tabela
+  app.post(`${apiPrefix}/database/tables/:tableName/data`, async (req, res) => {
+    try {
+      const { tableName } = req.params;
+      const data = req.body;
+      
+      // Verificar se o tableName é válido para evitar SQL injection
+      const tableCheck = await db.execute(sql`
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.tables 
+          WHERE table_schema = 'public' AND table_name = ${tableName}
+        ) as exists
+      `);
+      
+      if (!tableCheck.rows[0].exists) {
+        return res.status(404).json({ error: "Tabela não encontrada" });
+      }
+      
+      // Construir a inserção dinâmica
+      const columns = Object.keys(data);
+      const values = Object.values(data);
+      
+      // Criar cláusula SQL para inserção
+      const columnStr = columns.map(col => `"${col}"`).join(', ');
+      const valuePlaceholders = columns.map((_, i) => `$${i+1}`).join(', ');
+      
+      const insertQuery = sql.raw(
+        `INSERT INTO "${tableName}" (${columnStr}) VALUES (${valuePlaceholders}) RETURNING *`,
+        values
+      );
+      
+      const result = await db.execute(insertQuery);
+      
+      res.status(201).json(result.rows[0]);
+    } catch (error) {
+      handleError(res, error, "Erro ao criar registro");
+    }
+  });
+  
+  // Endpoint para atualizar um registro
+  app.put(`${apiPrefix}/database/tables/:tableName/data/:id`, async (req, res) => {
+    try {
+      const { tableName, id } = req.params;
+      const data = req.body;
+      
+      // Verificar se o tableName é válido
+      const tableCheck = await db.execute(sql`
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.tables 
+          WHERE table_schema = 'public' AND table_name = ${tableName}
+        ) as exists
+      `);
+      
+      if (!tableCheck.rows[0].exists) {
+        return res.status(404).json({ error: "Tabela não encontrada" });
+      }
+      
+      // Construir a atualização dinâmica
+      const columns = Object.keys(data);
+      const values = Object.values(data);
+      
+      // Criar cláusula SET para atualização
+      const setClause = columns.map((col, i) => `"${col}" = $${i+1}`).join(', ');
+      
+      // Adicionar o ID como último parâmetro
+      const updateQuery = sql.raw(
+        `UPDATE "${tableName}" SET ${setClause} WHERE id = $${columns.length+1} RETURNING *`,
+        [...values, id]
+      );
+      
+      const result = await db.execute(updateQuery);
+      
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "Registro não encontrado" });
+      }
+      
+      res.json(result.rows[0]);
+    } catch (error) {
+      handleError(res, error, "Erro ao atualizar registro");
+    }
+  });
+  
+  // Endpoint para excluir um registro
+  app.delete(`${apiPrefix}/database/tables/:tableName/data/:id`, async (req, res) => {
+    try {
+      const { tableName, id } = req.params;
+      
+      // Verificar se o tableName é válido
+      const tableCheck = await db.execute(sql`
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.tables 
+          WHERE table_schema = 'public' AND table_name = ${tableName}
+        ) as exists
+      `);
+      
+      if (!tableCheck.rows[0].exists) {
+        return res.status(404).json({ error: "Tabela não encontrada" });
+      }
+      
+      // Verificar se existe coluna deleted_at para soft delete
+      const columnCheck = await db.execute(sql`
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'public' AND table_name = ${tableName} AND column_name = 'deleted_at'
+        ) as exists
+      `);
+      
+      let result;
+      
+      if (columnCheck.rows[0].exists) {
+        // Soft delete - apenas atualizar deleted_at
+        const updateQuery = sql.raw(
+          `UPDATE "${tableName}" SET "deleted_at" = CURRENT_TIMESTAMP WHERE id = $1 RETURNING id`,
+          [id]
+        );
+        result = await db.execute(updateQuery);
+      } else {
+        // Hard delete - remover o registro permanentemente
+        const deleteQuery = sql.raw(
+          `DELETE FROM "${tableName}" WHERE id = $1 RETURNING id`,
+          [id]
+        );
+        result = await db.execute(deleteQuery);
+      }
+      
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "Registro não encontrado" });
+      }
+      
+      res.json({ success: true, message: "Registro excluído com sucesso" });
+    } catch (error) {
+      handleError(res, error, "Erro ao excluir registro");
+    }
+  });
+  
+  // Endpoint para criar uma nova tabela (dinâmica)
+  app.post(`${apiPrefix}/database/tables`, async (req, res) => {
+    try {
+      const { tableName, columns } = req.body;
+      
+      if (!tableName || !columns || !Array.isArray(columns) || columns.length === 0) {
+        return res.status(400).json({ error: "Nome da tabela e definição de colunas são obrigatórios" });
+      }
+      
+      // Verificar se a tabela já existe
+      const tableCheck = await db.execute(sql`
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.tables 
+          WHERE table_schema = 'public' AND table_name = ${tableName}
+        ) as exists
+      `);
+      
+      if (tableCheck.rows[0].exists) {
+        return res.status(400).json({ error: "Tabela já existe" });
+      }
+      
+      // Construir a cláusula de criação de tabela
+      let columnsDefinition = columns.map(col => {
+        let def = `"${col.name}" ${mapTypeToSQL(col.type)}`;
+        
+        if (col.primary) {
+          def += " PRIMARY KEY";
+        }
+        
+        if (col.notNull) {
+          def += " NOT NULL";
+        }
+        
+        if (col.defaultValue !== undefined) {
+          def += ` DEFAULT ${formatSQLValue(col.defaultValue, col.type)}`;
+        }
+        
+        return def;
+      }).join(', ');
+      
+      // Adicionar colunas de timestamp e soft delete se solicitado
+      const includeTimestamps = req.body.timestamps !== false;
+      const includeSoftDelete = req.body.softDelete === true;
+      
+      if (includeTimestamps) {
+        columnsDefinition += `, "created_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "updated_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`;
+      }
+      
+      if (includeSoftDelete) {
+        columnsDefinition += `, "deleted_at" TIMESTAMP`;
+      }
+      
+      // Criar a tabela
+      const createTableQuery = sql.raw(`CREATE TABLE "${tableName}" (${columnsDefinition})`);
+      await db.execute(createTableQuery);
+      
+      res.status(201).json({
+        success: true,
+        message: "Tabela criada com sucesso",
+        tableName,
+        columns: columns.map(col => col.name)
+      });
+    } catch (error) {
+      handleError(res, error, "Erro ao criar tabela");
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

@@ -194,10 +194,16 @@ export default function Editor() {
                   </button>
                 </div>
                 
-                <CodeEditor 
-                  language={codeEditorTab} 
-                  onResize={(newHeight) => setCodeEditorHeight(newHeight)}
-                />
+                {codeEditorTab === 'database' ? (
+                  <div className="h-full overflow-hidden">
+                    <DatabaseVisualizer projectId="default" />
+                  </div>
+                ) : (
+                  <CodeEditor 
+                    language={codeEditorTab} 
+                    onResize={(newHeight) => setCodeEditorHeight(newHeight)}
+                  />
+                )}
               </div>
             )}
           </main>
