@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useLocation } from "wouter";
 import Header from "@/components/editor/Header";
 import ElementLibrary from "@/components/editor/ElementLibrary";
 import Canvas from "@/components/editor/Canvas";
@@ -6,6 +7,8 @@ import PropertyPanel from "@/components/editor/PropertyPanel";
 import CodeEditor from "@/components/editor/CodeEditor";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
+import { useEditorStore } from "@/lib/editor-store";
+import { useToast } from "@/hooks/use-toast";
 
 export type ViewMode = "desktop" | "tablet" | "mobile";
 
@@ -15,6 +18,48 @@ export default function Editor() {
   const [codeEditorTab, setCodeEditorTab] = useState<"html" | "css" | "javascript" | "database" | "api">("html");
   const [viewMode, setViewMode] = useState<ViewMode>("desktop");
   const [zoom, setZoom] = useState(100);
+  
+  const { loadTemplate } = useEditorStore();
+  const { toast } = useToast();
+  const [location] = useLocation();
+
+  // Load template from URL parameter if specified
+  const loadTemplateFromUrl = useCallback(async () => {
+    // Parse template parameter from URL
+    const params = new URLSearchParams(window.location.search);
+    const templateType = params.get('template');
+    
+    if (templateType === 'ecommerce') {
+      // Import the template module and load the e-commerce template
+      try {
+        const { templates } = await import('@/lib/templates');
+        const ecommerceTemplates = templates.ecommerce.items;
+        
+        if (ecommerceTemplates && ecommerceTemplates.length > 0) {
+          // Load the first e-commerce template
+          const template = ecommerceTemplates[0];
+          loadTemplate(template.elements);
+          
+          toast({
+            title: "Template carregado",
+            description: `O template de e-commerce ${template.name} foi carregado com sucesso.`
+          });
+        }
+      } catch (error) {
+        console.error('Erro ao carregar template:', error);
+        toast({
+          title: "Erro ao carregar template",
+          description: "Não foi possível carregar o template solicitado.",
+          variant: "destructive"
+        });
+      }
+    }
+  }, [loadTemplate, toast]);
+
+  // Run once when the component mounts
+  useEffect(() => {
+    loadTemplateFromUrl();
+  }, [loadTemplateFromUrl]);
 
   // Handle keyboard shortcuts
   useEffect(() => {

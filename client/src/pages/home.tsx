@@ -55,11 +55,21 @@ export default function Home() {
               O NextGen Site Builder revoluciona a forma de criar websites com uma plataforma avançada de arrastar e soltar, 
               assistência de IA e ferramentas profissionais.
             </p>
-            <Link href="/editor">
-              <Button size="lg" className="text-lg px-8 py-6">
-                Começar Agora
-              </Button>
-            </Link>
+            <div className="flex items-center justify-center gap-4">
+              <Link href="/editor">
+                <Button size="lg" className="text-lg px-8 py-6">
+                  Começar Agora
+                </Button>
+              </Link>
+              <Link href="/editor?template=ecommerce">
+                <Button size="lg" className="text-lg px-8 py-6" variant="outline">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                  </svg>
+                  Ver Templates
+                </Button>
+              </Link>
+            </div>
           </div>
         </section>
 
