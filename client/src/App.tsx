@@ -16,15 +16,23 @@ import Checkout from "@/pages/checkout";
 import Subscribe from "@/pages/subscribe";
 import OrderConfirmation from "@/pages/order-confirmation";
 
-// Importando a página de Meus Projetos
+// Importando páginas protegidas
 import MeusProjetos from "@/pages/meus-projetos";
+import MeuPerfil from "@/pages/meu-perfil";
+
+// Componente temporário para a página de configurações
+const Configuracoes = () => (
+  <div className="container py-10">
+    <h1 className="text-3xl font-bold">Configurações</h1>
+    <p className="mt-4 text-muted-foreground">Esta página está em desenvolvimento.</p>
+  </div>
+);
 
 function Router() {
   return (
     <Switch>
+      {/* Rotas públicas */}
       <Route path="/" component={Home} />
-      <ProtectedRoute path="/editor" component={Editor} />
-      <ProtectedRoute path="/meus-projetos" component={MeusProjetos} />
       <Route path="/auth" component={Auth} />
       <Route path="/produtos" component={Products} />
       <Route path="/produtos/:slug" component={ProductDetails} />
@@ -32,6 +40,14 @@ function Router() {
       <Route path="/checkout" component={Checkout} />
       <Route path="/pedido-confirmado/:orderId" component={OrderConfirmation} />
       <Route path="/assinatura" component={Subscribe} />
+      
+      {/* Rotas protegidas que requerem autenticação */}
+      <ProtectedRoute path="/editor" component={Editor} />
+      <ProtectedRoute path="/meus-projetos" component={MeusProjetos} />
+      <ProtectedRoute path="/meu-perfil" component={MeuPerfil} />
+      <ProtectedRoute path="/configuracoes" component={Configuracoes} />
+      
+      {/* Fallback para rota não encontrada */}
       <Route component={NotFound} />
     </Switch>
   );
