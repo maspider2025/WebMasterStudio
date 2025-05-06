@@ -809,7 +809,36 @@ export const useEditorStore = create<EditorState>()(
         const { currentProject, elements } = get();
         
         if (!currentProject) {
-          return;
+          // Se não houver projeto atual, criar um novo projeto básico
+          const newProject: Project = {
+            id: `project-${Date.now()}`,
+            name: 'Novo Projeto',
+            description: 'Projeto criado automaticamente',
+            pages: [
+              {
+                id: `page-${Date.now()}`,
+                name: 'Home',
+                isHomepage: true,
+                elements: cloneElements(elements),
+              },
+            ],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          
+          set({ 
+            currentProject: newProject,
+            currentPageId: newProject.pages[0].id,
+            unsavedChanges: false
+          });
+          
+          // Retornar informações sobre o projeto criado para exibir na notificação
+          return { 
+            success: true, 
+            message: 'Novo projeto criado com sucesso', 
+            projectName: newProject.name,
+            isNew: true
+          };
         }
         
         const updatedProject: Project = {
@@ -826,13 +855,37 @@ export const useEditorStore = create<EditorState>()(
           updatedAt: new Date().toISOString(),
         };
         
-        // We would typically save to API here
-        // For now, just update local state
-        set({ currentProject: updatedProject });
-        
-        // In a real application, we would persist to backend
-        // Example:
-        // apiRequest('PUT', `/api/projects/${currentProject.id}`, updatedProject);
+        // Implementar salvamento persistente
+        try {
+          // Salvar no localStorage como backup e para demonstração
+          localStorage.setItem(`project_${updatedProject.id}`, JSON.stringify(updatedProject));
+          
+          // Atualizar o estado do projeto
+          set({ 
+            currentProject: updatedProject,
+            unsavedChanges: false,
+            recentProjects: [...(get().recentProjects || []).filter(id => id !== updatedProject.id), updatedProject.id].slice(-5)
+          });
+          
+          // Em uma aplicação real, faríamos a persistência no backend
+          // Por exemplo:
+          // await apiRequest('PUT', `/api/projects/${currentProject.id}`, updatedProject);
+          
+          // Retornar informações para o toast de sucesso
+          return { 
+            success: true, 
+            message: 'Projeto salvo com sucesso', 
+            projectName: updatedProject.name,
+            isNew: false
+          };
+        } catch (error) {
+          console.error('Erro ao salvar projeto:', error);
+          return { 
+            success: false, 
+            message: 'Erro ao salvar projeto', 
+            error: String(error) 
+          };
+        }
       },
       
       loadProject: async (projectId) => {
@@ -1056,7 +1109,76 @@ export const useEditorStore = create<EditorState>()(
       toggleSnapToElements: () => set(state => ({ snapToElements: !state.snapToElements })),
       toggleGuides: () => set(state => ({ showGuides: !state.showGuides })),
       toggleRulers: () => set(state => ({ rulers: !state.rulers })),
-      toggleFullscreenPreview: () => set(state => ({ fullscreenPreview: !state.fullscreenPreview })),
+      toggleFullscreenPreview: () => {
+        // Implementação completa do modo de visualização em tela cheia
+        set(state => {
+          const newValue = !state.fullscreenPreview;
+          
+          // Se estiver ativando o modo de tela cheia
+          if (newValue) {
+            // Armazenar o estado anterior para restaurar depois
+            const previousState = {
+              activePanel: state.activePanel,
+              editorMode: state.editorMode,
+              zoom: state.zoom
+            };
+            
+            // Usar armazenamento local para persistir entre renders
+            sessionStorage.setItem('previousEditorState', JSON.stringify(previousState));
+            
+            // Entrar no modo de visualização com configurações otimizadas
+            return {
+              fullscreenPreview: true,
+              activePanel: null, // Ocultar todos os painéis
+              editorMode: 'preview', // Alternar para modo de visualização
+              zoom: 100 // Restaurar o zoom para 100%
+            };
+          } else {
+            // Restaurar o estado anterior ao sair do modo de tela cheia
+            try {
+              const previousStateJson = sessionStorage.getItem('previousEditorState');
+              if (previousStateJson) {
+                const previousState = JSON.parse(previousStateJson);
+                return {
+                  fullscreenPreview: false,
+                  activePanel: previousState.activePanel,
+                  editorMode: previousState.editorMode,
+                  zoom: previousState.zoom
+                };
+              }
+            } catch (e) {
+              console.error('Erro ao restaurar estado anterior:', e);
+            }
+            
+            // Caso ocorra algum problema, apenas sair do modo de tela cheia
+            return { fullscreenPreview: false };
+          }
+        });
+        
+        // Aplicar efeitos no documento HTML para verdadeira visualização em tela cheia
+        if (get().fullscreenPreview) {
+          // Tentar usar a API Fullscreen se disponível
+          const element = document.documentElement;
+          if (element.requestFullscreen) {
+            element.requestFullscreen().catch(err => {
+              console.error('Erro ao ativar modo de tela cheia:', err);
+            });
+          }
+          
+          // Adicionar uma classe ao body para estilização
+          document.body.classList.add('editor-fullscreen-mode');
+        } else {
+          // Sair do modo de tela cheia do navegador
+          if (document.exitFullscreen && document.fullscreenElement) {
+            document.exitFullscreen().catch(err => {
+              console.error('Erro ao sair do modo de tela cheia:', err);
+            });
+          }
+          
+          // Remover a classe do body
+          document.body.classList.remove('editor-fullscreen-mode');
+        }
+      },
       
       // Multiple selection implementations
       selectMultipleElements: (ids) => set({ multipleSelection: ids }),

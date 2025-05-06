@@ -285,7 +285,39 @@ const Canvas = ({ viewMode, zoom }: CanvasProps) => {
                       <option value="">Página Principal</option>
                     )}
                   </select>
-                  <Button variant="outline" size="sm" title="Adicionar Nova Página">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    title="Adicionar Nova Página"
+                    onClick={() => {
+                      // Criar uma nova página padrão e adicionar ao projeto
+                      const result = useEditorStore.getState().addPage({
+                        name: `Nova Página ${useEditorStore.getState().allPages.length + 1}`,
+                        slug: `page-${Date.now()}`,
+                        type: 'custom',
+                        isHomepage: false,
+                        elements: [],
+                        metadata: {
+                          seo: {
+                            title: `Nova Página ${useEditorStore.getState().allPages.length + 1}`,
+                            description: 'Página criada no NextGen Site Builder',
+                          },
+                          settings: {
+                            showHeader: true,
+                            showFooter: true,
+                          }
+                        }
+                      });
+                      
+                      // Mostrar notificação de sucesso
+                      if (result && result.success) {
+                        toast({
+                          title: 'Página criada com sucesso',
+                          description: `A página "${result.pageName}" foi adicionada ao projeto.`,
+                        });
+                      }
+                    }}
+                  >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
