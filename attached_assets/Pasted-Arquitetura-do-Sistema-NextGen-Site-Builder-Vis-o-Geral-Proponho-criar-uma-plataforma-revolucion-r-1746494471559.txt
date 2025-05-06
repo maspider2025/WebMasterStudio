@@ -1,0 +1,60 @@
+Arquitetura do Sistema "NextGen Site Builder"
+Visão Geral
+Proponho criar uma plataforma revolucionária de construção de sites chamada "NextGen Site Builder", que unifica experiências no-code e pro-code com assistência de IA, permitindo desde iniciantes até desenvolvedores experientes criarem sites completos com frontend e backend.
+Stack Tecnológica
+Frontend:
+
+Framework Principal: React com Next.js (para otimização SEO e SSR)
+Gerenciamento de Estado: Redux Toolkit + Context API para estados locais
+Interface de Drag-and-Drop: Combinação customizada de react-dnd e fabric.js para manipulação avançada do canvas
+Estilização: Sistema baseado em Tailwind CSS com extensor proprietário para controles CSS ilimitados
+Editores de Código: Monaco Editor (mesmo usado pelo VS Code) para HTML, CSS, JS, JSX, TS e TSX
+
+Backend:
+
+API Core: Node.js com NestJS (arquitetura escalável e modular)
+Banco de Dados: PostgreSQL com Prisma ORM + MongoDB para armazenamento flexível de dados
+Cache: Redis para otimização de performance
+Storage: AWS S3 ou armazenamento compatível para ativos de mídia
+Containerização: Docker + Kubernetes para implantação escalável
+
+IA e Machine Learning:
+
+Assistente de Design: Modelo de IA personalizado para sugestões de design contextual
+Geração de Código: Modelo GPT ou similar ajustado para transformar intenções em código
+Análise Visual: Sistema de visão computacional para análise e otimização de layouts
+
+Componentes da Arquitetura
+1. Editor Canvas Avançado
+
+Sistema de grade adaptativa com alinhamento inteligente
+Controles multi-camada para manipulação precisa de elementos
+Sistema de histórico de ações ilimitado com ramificações
+Medição automática e sugestões de espaçamento
+Manipulação direta de elementos com controles transformados (rotação, escala, etc.)
+
+2. Sistema de Design Responsivo
+
+Visualização e edição simultânea para desktop, tablet e mobile
+Regras condicionais para alteração de propriedades em diferentes breakpoints
+Controles adaptáveis para garantir acessibilidade em diferentes dispositivos
+
+3. Gerenciador de Templates
+
+Biblioteca expansível de templates profissionais categorizados
+Sistema de composição de templates (combinação de seções de diferentes templates)
+Análise inteligente de conteúdo para adaptar templates ao nicho específico
+
+4. Editor de Código Integrado
+
+Alternância instantânea entre visual e código para qualquer componente
+Validação em tempo real com sugestões de correção
+Sincronização bidirecional entre alterações visuais e código
+Intellisense avançado com autocompleção contextual
+
+5. Construtor de Backend
+
+Interface visual para modelagem de dados e relacionamentos
+Gerador automático de API RESTful e GraphQL
+Interface de gerenciamento de banco de dados sem código
+Conexão direta com serviços de terceiros (pagamentos, email, etc.)
