@@ -5,6 +5,7 @@ import ElementLibrary from "@/components/editor/ElementLibrary";
 import Canvas from "@/components/editor/Canvas";
 import PropertyPanel from "@/components/editor/PropertyPanel";
 import CodeEditor from "@/components/editor/CodeEditor";
+import DatabaseVisualizer from "@/components/editor/DatabaseVisualizer";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { useEditorStore } from "@/lib/editor-store";
