@@ -5109,15 +5109,45 @@ app.get(`${apiPrefix}/projects`, async (req, res) => {
   // Endpoint para criar uma nova tabela (dinâmica)
   app.post(`${apiPrefix}/database/tables`, handleCreateTable);
   
+  // Endpoint teste para verificar processamento JSON
+  app.post(`${apiPrefix}/test/json`, (req, res) => {
+    console.log('TESTE RECEBIMENTO JSON');
+    console.log('req.body:', req.body);
+    console.log('typeof req.body:', typeof req.body);
+    console.log('JSON.stringify(req.body):', JSON.stringify(req.body));
+    
+    res.json({
+      status: 'Recebido',
+      body: req.body,
+      bodyKeys: Object.keys(req.body || {}),
+      contentType: req.headers['content-type']
+    });
+  });
+
   // Endpoint personalizado para projetos - criar tabela
   app.post(`${apiPrefix}/projects/:projectId/database/tables`, (req, res) => {
-    // Transferir o ID do projeto dos parâmetros para a query
-    req.query.projectId = req.params.projectId;
-    
+    // Verificar se o corpo da requisição foi recebido
     console.log('Endpoint de criação de tabela para projeto específico');
-    console.log('Corpo da requisição:', req.body);
+    console.log('Corpo da requisição BRUTO:', req.body);
+    console.log('Corpo da requisição JSON:', JSON.stringify(req.body));
+    console.log('Headers:', req.headers);
+    console.log('Content-Type:', req.headers['content-type']);
     console.log('Query params:', req.query);
     console.log('URL params:', req.params);
+    
+    // Se o corpo estiver vazio mas deveria ser JSON (pelo content-type), pode ser um erro de parsing
+    if (req.headers['content-type']?.includes('application/json') && 
+        (Object.keys(req.body || {}).length === 0)) {
+      console.log('AVISO: Corpo da requisição vazio ou não parseado corretamente!');
+    }
+    
+    // Verificar tableName e columns
+    const { tableName, columns } = req.body || {};
+    console.log('tableName extraído:', tableName);
+    console.log('columns extraído:', columns);
+    
+    // Transferir o ID do projeto dos parâmetros para a query
+    req.query.projectId = req.params.projectId;
     
     // Chamar o handler de criação de tabela
     handleCreateTable(req, res);
