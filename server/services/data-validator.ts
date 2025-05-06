@@ -190,7 +190,8 @@ export class DataValidator {
         break;
         
       case 'number':
-        if (typeof value !== 'number' || isNaN(value)) {
+        // Aceitar strings que podem ser convertidas para número
+        if ((typeof value !== 'number' && typeof value !== 'string') || isNaN(Number(value))) {
           return {
             field,
             message: `O campo '${field}' deve ser um número`,
